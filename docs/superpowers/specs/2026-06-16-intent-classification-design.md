@@ -68,13 +68,32 @@ IntentDef {
 
 ## 3. Classification Strategy: LLM-First + Keyword Fallback
 
-### 3.1 LLM Prompt Construction
+### 3.1 Conversation Context
 
-The framework builds a system prompt from the user's intent definitions. The prompt includes:
+Intent classification is not a single-message operation. The LLM prompt must include conversation history to resolve ambiguous utterances. For example, "yes" means `confirm` if the agent just asked "should I proceed?" but means `provide_information` if the agent asked "what's your name?".
 
-1. A list of all intents with their descriptions
-2. A few-shot examples for each intent
-3. A structured output instruction: `{ intent: string, confidence: number, reasoning: string }`
+The framework includes the **last 3 user messages + last 3 agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
+
+### 3.2 Edge Case Coverage
+
+Intent classification serves as the system's safety net for unexpected user behavior. Edge cases it must handle:
+
+- Abrupt topic switches mid-workflow ("never mind, I want to pay someone instead")
+- Ambiguous one-word responses ("ok", "sure", "no")
+- Off-topic questions during a workflow
+- Partial or incomplete utterances
+- Code-switching or mixed-language input
+
+When the classifier cannot confidently resolve an edge case, it returns `unrecognized_intent`, triggering a clarification response.
+
+### 3.3 LLM Prompt Construction
+
+The framework builds a system prompt from the user's intent definitions and conversation context. The prompt includes:
+
+1. The last 3 user messages + last 3 agent messages (context window)
+2. A list of all intents with their descriptions
+3. A few-shot examples for each intent
+4. A structured output instruction: `{ intent: string, confidence: number, reasoning: string }`
 
 Temperature is set to 0 for deterministic classification.
 
