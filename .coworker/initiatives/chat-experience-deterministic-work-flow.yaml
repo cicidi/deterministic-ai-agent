@@ -1,0 +1,166 @@
+created: '2026-06-15'
+updated: '2026-06-16'
+name: chat-experience-deterministic-work-flow
+status: active
+description: >
+  Design and build a deterministic workflow framework for enterprise chatbots
+  in regulated industries (finance, health, insurance). The framework follows
+  a three-layer architecture (NLU/Extraction → Routing/Execution → Response
+  Generation) where each node independently chooses LLM-driven or deterministic
+  execution. All docs and code comments in English; team discussion in Chinese.
+
+goal: >
+  Produce a comprehensive specification document for the deterministic workflow
+  framework. The spec consists of a high-level overview document and layered
+  sub-documents for each architectural layer, with parent-child cross-references,
+  per-file changelogs, and evidence sections backed by analysis of real-world
+  reference projects.
+
+outcome:
+  type: specification
+  root_document: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+  doc_base_path: docs/superpowers
+  document_structure:
+    specs:
+      - file: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Deterministic Workflow Framework — High-Level Design
+        description: Three-layer architecture overview, node-level LLM/deterministic switch matrix, key design patterns, declarative sample, gap analysis
+        children:
+          - docs/superpowers/specs/2026-06-16-extraction-layer-design.md
+          - docs/superpowers/specs/2026-06-16-routing-execution-layer-design.md
+          - docs/superpowers/specs/2026-06-16-response-generation-layer-design.md
+          - docs/superpowers/specs/2026-06-16-framework-api-design.md
+      - file: docs/superpowers/specs/2026-06-16-extraction-layer-design.md
+        parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Extraction Layer Specification
+        description: Intent classification, entity extraction (slot filling), two-phase dynamic schema, state-aware NLU prompting, deterministic fallback pipeline
+      - file: docs/superpowers/specs/2026-06-16-routing-execution-layer-design.md
+        parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Routing & Execution Layer Specification
+        description: State machine design, conditional routing, field validation, business computation, sticky mode, retry budgets, sub-workflow reuse
+      - file: docs/superpowers/specs/2026-06-16-response-generation-layer-design.md
+        parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Response Generation Layer Specification
+        description: LLM generation, deterministic templates, frontmatter component protocol, sensitive field handling, post-API data scrubbing
+      - file: docs/superpowers/specs/2026-06-16-framework-api-design.md
+        parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Framework API Specification
+        description: Interface schemas, LangGraph integration, checkpoint strategy, configuration overlay
+    prd:
+      - null  # reserved for product requirements
+    plans:
+      - null  # reserved for implementation plans
+    tests:
+      - null  # reserved for test plans
+  naming_convention: docs/superpowers/{category}/YYYY-MM-DD-<topic>-<type>.md
+  format_requirements:
+    - Enterprise design document style
+    - All content in English
+    - Each file has a changelog section
+    - Each file has an evidence section referencing analyzed projects
+    - Parent-child cross-references between files
+    - Decision records with rationale
+    - No implementation code — only schemas, samples, and interface definitions
+    - Implementation code will be produced separately when requested
+
+decisions:
+  - date: '2026-06-15'
+    what: Tech stack — Python + LangGraph
+    why: LangGraph provides state graph, checkpoint, streaming primitives; Python has strongest LangGraph ecosystem
+    who: cicidi
+  - date: '2026-06-15'
+    what: Scope — generic framework (not single-industry specific)
+    why: Framework should be configurable for any regulated industry; industry-specific flows as plugins/configs
+    who: cicidi
+  - date: '2026-06-15'
+    what: LLM strategy — LLM-assisted NLU with deterministic core workflows
+    why: LLM excels at understanding; execution must be auditable and deterministic
+    who: cicidi
+  - date: '2026-06-15'
+    what: Deliverable — pure Python framework library (pip installable)
+    why: Framework only, no frontend; other projects consume as dependency
+    who: cicidi
+  - date: '2026-06-16'
+    what: Control granularity — per-node LLM/deterministic switch (not per-layer binary)
+    why: Real projects (zelkim, Prodigal) show LLM usage varies by node, not by layer; some nodes need LLM, others must be deterministic
+    who: cicidi
+  - date: '2026-06-16'
+    what: Sub-workflow reuse — shared capabilities defined once, triggered from any entry point
+    why: zelkim duplicates RAG/question-answering logic in two branches; framework should prevent this
+    who: cicidi
+  - date: '2026-06-16'
+    what: Output format — spec-first with Python reference implementation
+    why: Spec defines language-agnostic interfaces; Python impl proves feasibility; enables future TS/Go ports
+    who: cicidi
+
+links:
+  - title: zelkim/langgraph-insurance-chatbot (Primary Reference)
+    url: https://github.com/zelkim/langgraph-insurance-chatbot
+  - title: Prodigal Payment Collection AI Agent (Secondary Reference)
+    url: https://github.com/AvnishChitrigi/Prodigal-Assignment-Production-Ready-Payment-Collection-AI-Agent
+  - title: chatbot-FSM-experiment (Supplementary Reference)
+    url: https://github.com/VicentePareja/chatbot-FSM-experiment
+  - title: LangGraph (Underlying Runtime)
+    url: https://github.com/langchain-ai/langgraph
+  - title: Rasa CALM (Philosophy Alignment)
+    url: https://rasa.com
+
+evidence:
+  - source: zelkim/langgraph-insurance-chatbot
+    type: reference-implementation
+    key_findings:
+      - LangGraph StateGraph with 9 nodes and 6 conditional edges
+      - Two-phase dynamic schema prevents field-name bias in slot filling
+      - "Once transactional, always transactional" sticky mode lock
+      - Frontmatter protocol for deterministic structured UI rendering
+      - Pure pass-through router node (routing logic in conditional edges)
+      - RAG/question-answering logic duplicated across conversational and transactional branches
+    relevant_specs:
+      - docs/superpowers/specs/2026-06-16-extraction-layer-design.md
+      - docs/superpowers/specs/2026-06-16-routing-execution-layer-design.md
+      - docs/superpowers/specs/2026-06-16-response-generation-layer-design.md
+
+  - source: Prodigal-Payment-Collection-Agent
+    type: reference-implementation
+    key_findings:
+      - 7-state FSM with strict one-way transitions (Python enum + if/elif dispatch)
+      - LLM used ONLY for entity extraction; all routing deterministic
+      - Mandatory regex/DOM-parser fallbacks for every slot — passes all 9 tests without LLM
+      - State-aware NLU prompting to prevent cross-slot confusion
+      - Card data wiped from memory immediately after API call (PCI-DSS awareness)
+      - PII zero-leakage verified by automated test harness
+      - Per-phase independent retry budgets
+      - Expiry parsed before CVV to prevent digit collision
+    relevant_specs:
+      - docs/superpowers/specs/2026-06-16-extraction-layer-design.md
+      - docs/superpowers/specs/2026-06-16-routing-execution-layer-design.md
+      - docs/superpowers/specs/2026-06-16-response-generation-layer-design.md
+
+  - source: chatbot-FSM-experiment
+    type: supplementary
+    key_findings:
+      - Healthcare scheduler with FastAPI + Next.js + PostgreSQL
+      - FSM-based conversational agent
+      - Docker Compose orchestration for full-stack demo
+    relevant_specs: []
+
+projects:
+  - name: deterministic-workflow
+    role: peer
+    branches:
+      - main
+      - feat/deterministic-framework
+  - name: saas-app
+    role: peer
+    branches:
+      - main
+
+reference_docs:
+  - title: High-Level Design Spec
+    path: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+  - title: zelkim Project (Local Copy)
+    path: other-projects/langgraph-insurance-chatbot
+  - title: Prodigal Project (Local Copy)
+    path: other-projects/Prodigal-Payment-Collection-Agent
+  - title: FSM-Experiment Project (Local Copy)
+    path: other-projects/chatbot-FSM-experiment
