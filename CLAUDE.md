@@ -1,5 +1,13 @@
 
 
+## Project Principles
+
+1. **Architecture-First.** Clean, well-structured architecture is the foundation of every decision. Prefer clarity over cleverness.
+2. **Fintech-First, Industry-Agnostic.** Primary use case targets fintech (insurance, banking, payment). Architecture must remain generic enough to extend to any regulated industry's agentic workflow (healthcare, legal, government).
+3. **Guided Framework, Not Out-of-the-Box.** This is a reference architecture and design pattern framework—not a pre-built, plug-and-play solution. It provides the *how* and *why*; users adapt it to their industry. Detailed implementation questions are deferred for architect-level discussions during adoption, not solved upfront.
+4. **Actionable & Extensible.** Every design decision must result in something that can be built and extended. Framework-level concerns (security, multi-tenancy, deployment) are identified early but not prematurely solved.
+5. **Learnable.** Documentation, examples, and API design must guide users from understanding to adoption. A new developer should be able to read the spec and understand *what* to build and *why*.
+
 <!-- INITIATIVE:chat-experience-deterministic-work-flow START -->
 ## Active Initiative: chat-experience-deterministic-work-flow
 
