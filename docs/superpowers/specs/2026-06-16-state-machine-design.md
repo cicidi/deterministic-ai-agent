@@ -22,6 +22,8 @@
 
 ## 2. transitions Definition Format (Single Source of Truth)
 
+> This example shows a simplified insurance quote workflow. For brevity, some states omit `input_schema`/`context_schema`/`output_schema`. See Appendix A and B for the complete format.
+
 ```yaml
 # quote_workflow.yaml — the only file developers maintain
 workflow: insurance_quote
@@ -166,6 +168,8 @@ Each state can carry 5 types of metadata, enforced at different points in the st
 | **exit_guard** | At exit | Runtime block; routes to alternate branch | Branch routing based on computed result |
 | **postcondition** | After exit | Does not block runtime; verification tool reports violation | Ensures action function output contract |
 
+> **Note on static verification:** The "static analysis" and "verification tool" referenced above refers to a planned YAML linter and test generator (design TBD) that reads preconditions, postconditions, and invariants to catch contract violations before deployment. This tooling is out of scope for the current design document; see Appendix C.7 for related open questions.
+
 ### 3.2 Concrete Example: calculate State
 
 ```yaml
@@ -229,21 +233,52 @@ states:
     executor: llm | code
 
     # --- State Metadata (all optional) ---
-    precondition:    "expression or comment"
-    entry_guard:     "runtime-evaluated boolean expression"
-    data_invariant:  "constraint monitored throughout state lifetime"
-    exit_guard:      "boolean expression evaluated on exit"
-    postcondition:   "expression or comment"
+    precondition:     "expression or comment"
+    entry_guard:      "runtime-evaluated boolean expression"
+    data_invariant:   "constraint monitored throughout state lifetime"
+    exit_guard:       "boolean expression evaluated on exit"
+    postcondition:    "expression or comment"
+
+    # --- Data Schemas (optional, recommended) ---
+    input_schema:     {field: type, ...}     # data required from upstream state
+    context_schema:   {field: type, ...}     # working memory while in this state
+    output_schema:    {field: type, ...}     # data produced for downstream states
 
     # --- Execution ---
-    action:           "function name for code executor"
-    prompt:           "system prompt for llm executor"
-    output_schema:    {...}
-    tool_allowlist:   [...]
-    human_review:     true | false
-    stream:           true | false
-    on_error:         <fallback_state>
+    action:           "function name (required for code executor)"
+    prompt:           "system prompt (required for llm executor)"
+    tool_allowlist:   [...]                  # tools the LLM may call in this state
+    human_review:     true | false           # whether to interrupt for human approval
+    review_prompt:    "what the approver sees"
+    stream:           true | false           # whether to stream LLM output
+    on_exit:          "callback function run after state completes"
+    on_error:         <fallback_state>       # state to enter on unhandled error
+    description:      "human-readable note about what this state does"
+
+    # --- Guard Meta-Variables (framework-generated, usable in guard expressions) ---
+    # These are not user-defined fields. The framework sets them automatically:
+    #   exit_guard_pass    — true if all exit_guard constraints passed
+    #   exit_guard_blocked — true if any exit_guard constraint failed
+    #   context_complete   — true when the LLM confirms it has all needed data
+    #   context_incomplete — true when the LLM needs more info (drives self-loop)
+    #   all_approved       — true when all required human approvals received
+    #   any_rejected       — true when any human approval was rejected
+    #   any_field_missing  — true when output_schema has null required fields
+    #   retries_exhausted  — true when LLM or code node has exceeded max retries
 ```
+
+### 3.5 Guard Expression Syntax
+
+Guard expressions support:
+- **State field access:** `field_name`, `schema.field_name` (e.g., `amount`, `collected_data.age`)
+- **Boolean operators:** `AND`, `OR`, `NOT`, `and`, `or`, `not`
+- **Comparison operators:** `==`, `!=`, `>`, `<`, `>=`, `<=`
+- **List membership:** `field in [a, b, c]`, `field in ['a', 'b', 'c']`
+- **Null checks:** `field != null`, `field == null`
+- **Meta-variables:** framework-generated flags listed in §3.4
+- **Natural language prose:** allowed as fallback when the condition cannot be mechanically evaluated (treated as "not verifiable by static analysis, always raises a warning")
+
+Full formal grammar is deferred to implementation planning (see Appendix C.2).
 
 ---
 
@@ -495,7 +530,7 @@ states:
     context_schema:
       approval_route: str                      # "auto" | "manager" | "director" | "cfo"
       required_approvers: list                 # ["manager"] | ["manager", "cfo"]
-    exit_guard: "approval_route must be one of auto / manager / director / cfo"
+    exit_guard: "approval_route in ['auto', 'manager', 'director', 'cfo']"
     postcondition: "required_approvers is non-empty"
     # Routing logic (deterministic):
     #   amount < 500        -> approval_route = "auto"
@@ -566,12 +601,12 @@ states:
     on_error: compensation_handler
 
   - name: compensation_handler
-    executor: code
-    action: rollback_erp_or_alert
+    executor: llm
     prompt: |
       ERP recording failed. Issue submitted to IT support ticket.
       Ticket #: {ticket_id}
-    # Compensation: if ERP write partially fails, call ERP rollback or escalate to manual ticket
+    # Compensation: if ERP write partially fails, ERP rollback or manual ticket escalation
+    # are triggered externally by the LLM node (via tool call)
 
   # ============================================================
   # Stage 6: Archive
@@ -584,6 +619,10 @@ states:
     stream: true
     output_schema:
       notification_sent: bool
+
+  # Terminal state
+  - name: invoice_closed
+    description: "Invoice processing complete; workflow ended"
 
 transitions:
   # Upload -> Extract
@@ -887,7 +926,7 @@ states:
       offered_amount: float | null
       plan_instalments: int | null
       plan_amount_per: float | null
-    exit_guard: "intent must be one of the known enum values"
+    exit_guard: "intent in ['pay_full', 'pay_partial', 'pay_plan', 'dispute']"
 
   # ============================================================
   # Stage 2: Intent Routing (code — pure deterministic routing)
@@ -905,7 +944,7 @@ states:
       selected_path: str                        # "full" | "partial" | "plan" | "dispute"
       final_amount: float
       requires_collection: bool                 # true = need to collect payment method
-    exit_guard: "selected_path must be set AND final_amount > 0 (except dispute)"
+    exit_guard: "selected_path != null AND (selected_path == 'dispute' OR final_amount > 0)"
     postcondition: "requires_collection is set"
     # Routing logic (deterministic):
     #   intent=pay_full       -> final_amount=total_due,      requires_collection=true
@@ -1025,7 +1064,7 @@ states:
       user_choice: str                           # "retry" | "change_method" | "give_up"
     output_schema:
       user_choice: str
-    exit_guard: "user_choice must be one of the known enum values"
+    exit_guard: "user_choice in ['retry', 'change_method', 'give_up']"
 
   # ============================================================
   # Stage 7: Installment Plan Setup (code)
@@ -1300,6 +1339,8 @@ Customer: "I'm short on cash right now, can I pay 3,000 first?"
 
 ### C.1 State Design
 
+> **Sub-workflow:** a state whose internal logic is itself a complete workflow (nested YAML definition). The parent state delegates execution to the child workflow and resumes when it completes.
+
 | # | Question | Impact |
 |---|----------|--------|
 | 1 | How to define state data schema? `input_schema` / `context_schema` / `output_schema` three-layer isolation vs flat dict | Audit trace granularity, data isolation safety |
@@ -1310,15 +1351,19 @@ Customer: "I'm short on cash right now, can I pay 3,000 first?"
 
 ### C.2 Transition & Guard
 
+> **History state:** a pseudo-state that remembers which sub-state was active when the parent was exited, enabling re-entry at the same point. Standard UML statechart concept.
+
 | # | Question | Impact |
 |---|----------|--------|
 | 6 | Guard expressiveness boundary: pure functions only? Allow external service calls (DB/API) | Performance, determinism, testability |
 | 7 | Guard conflict resolution — what happens when multiple guards are simultaneously true | Runtime behavioral determinism |
 | 8 | Guard completeness enforcement — how to statically detect uncovered exit guard cases | Prevents runtime deadlock in a state |
 | 9 | Implicit fallback (no-match) design: explicit catch-all vs framework-injected error handler | Compliance — system must not "freeze" |
-| 10 | Guard expression syntax — raw string eval vs restricted DSL | Developer experience, security |
+| 10 | Full guard expression grammar (see §3.5 for current syntax) | Developer experience, security |
 
 ### C.3 Parallel States
+
+> **Orthogonal regions:** multiple concurrently active sub-states within a parent state. For example, while in "onboarding", simultaneously run "verify_identity" and "collect_preferences" in parallel. Standard UML statechart concept.
 
 | # | Question | Impact |
 |---|----------|--------|
