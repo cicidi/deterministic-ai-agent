@@ -1,0 +1,356 @@
+workflow: home_insurance
+version: "1.0"
+
+states:
+  # ============================================================
+  # Entry
+  # ============================================================
+  - name: start
+    executor: code
+    action: reset_context
+    description: "Initialize workflow context; route to quote or claim based on intent"
+
+  # ============================================================
+  # Quote Branch: Collect Property Info
+  # ============================================================
+  - name: collect_property_info
+    executor: llm
+    prompt: |
+      Collect property information for home insurance quote:
+      - Property type (apartment, house, villa)
+      - Full address and postal code
+      - Building age (years)
+      - Floor area (square meters)
+      - Construction material (brick, concrete, wood_frame, steel)
+    output_schema:
+      property_type: str
+      address: str
+      postal_code: str
+      building_age: int
+      floor_area: float
+      construction_material: str
+    tool_allowlist: ["lookup_property_record"]
+    human_review: false
+    on_exit: validate_property_info
+    stream: true
+
+  - name: collect_coverage_needs
+    executor: llm
+    prompt: |
+      Collect coverage requirements:
+      - Coverage type (building_only, contents_only, both)
+      - Building coverage amount in CNY
+      - Contents coverage amount in CNY
+      - Deductible preference (low=500 CNY, standard=2000 CNY, high=5000 CNY)
+      - Additional riders (fire, theft, water_damage, earthquake, liability)
+    output_schema:
+      coverage_type: str
+      building_coverage: float
+      contents_coverage: float
+      deductible: str
+      riders: list
+    stream: true
+
+  # ============================================================
+  # Quote Branch: Risk Assessment (deterministic)
+  # ============================================================
+  - name: assess_risk
+    executor: code
+    action: compute_risk_score
+    precondition: |
+      property_type in ['apartment','house','villa']
+      AND building_age >= 0
+      AND floor_area > 0
+      AND construction_material in ['brick','concrete','wood_frame','steel']
+    entry_guard: "building_age < 100 AND floor_area > 0"
+    data_invariant: "risk_score >= 0 AND risk_score <= 100"
+    context_schema:
+      risk_score: float
+      risk_factors: list
+      rate_multiplier: float
+    exit_guard: "risk_score < 70"
+    postcondition: "rate_multiplier > 0"
+    # Internal logic:
+    #   risk_score = f(building_age, construction_material, flood_zone, crime_rate)
+    #   rate_multiplier = 0.8 + (risk_score / 250)
+
+  - name: high_risk_review
+    executor: llm
+    prompt: "Risk score is high ({risk_score}). Factors: {risk_factors}. Forward to underwriter for manual review."
+    human_review: true
+    review_prompt: |
+      High Risk Review — Home Insurance
+      Property: {address}
+      Risk Score: {risk_score}/100
+      Factors: {risk_factors}
+      Coverage: {coverage_type} — Building: {building_coverage} CNY
+    stream: false
+
+  # ============================================================
+  # Quote Branch: Premium Calculation (deterministic)
+  # ============================================================
+  - name: calculate_premium
+    executor: code
+    action: compute_home_premium
+    precondition: "building_coverage > 0 AND coverage_type in ['building_only','contents_only','both']"
+    entry_guard: "building_coverage > 0"
+    data_invariant: "annual_premium > 0"
+    exit_guard: "annual_premium < 50000"
+    postcondition: "annual_premium > 0 AND monthly_premium == annual_premium / 12"
+    context_schema:
+      annual_premium: float
+      monthly_premium: float
+      discount_applied: float
+    on_error: error_recovery
+    # Internal: annual_premium = base_rate * rate_multiplier * building_coverage / 1000
+
+  - name: present_quote
+    executor: llm
+    prompt: |
+      Present the home insurance quote with full breakdown:
+      - Property summary
+      - Coverage details
+      - Annual premium
+      - Deductible
+      - Included riders
+      Ask the user to confirm purchase.
+    human_review: true
+    review_prompt: |
+      Quote Review — Home Insurance
+      Property: {property_type} at {address}
+      Building Age: {building_age} years, {floor_area} sqm
+      Coverage: {coverage_type} — Building {building_coverage} CNY, Contents {contents_coverage} CNY
+      Annual Premium: {annual_premium} CNY ({monthly_premium} CNY/month)
+      Deductible: {deductible}
+      Riders: {riders}
+    stream: true
+
+  - name: confirm_purchase
+    executor: code
+    action: create_home_policy
+    precondition: "annual_premium > 0 AND address != null AND coverage_type != null"
+    entry_guard: "annual_premium > 0"
+    data_invariant: "policy_id immutable once set"
+    postcondition: "policy_id != null AND policy_status == 'active'"
+
+  # ============================================================
+  # Claim Branch: File & Validate
+  # ============================================================
+  - name: file_claim
+    executor: llm
+    prompt: |
+      Collect home insurance claim details:
+      - Incident type (fire, water_damage, theft, natural_disaster, other)
+      - Incident date
+      - Detailed damage description
+      - Estimated loss amount in CNY
+      - Upload photos or evidence
+    stream: true
+    tool_allowlist: ["upload_attachment", "lookup_policy"]
+    output_schema:
+      incident_type: str
+      incident_date: date
+      damage_description: str
+      estimated_loss: float
+      attachments: list
+
+  - name: validate_claim
+    executor: code
+    action: run_claim_validations
+    precondition: "policy_id != null AND incident_type in ['fire','water_damage','theft','natural_disaster','other']"
+    entry_guard: "policy_id != null AND NOT policy_expired"
+    data_invariant: "validation_errors only appends, never deletes existing errors"
+    context_schema:
+      validation_errors: list
+      validation_passed: bool
+      coverage_limit: float
+    exit_guard: "validation_passed == true"
+    postcondition: "validation_passed is boolean"
+    on_error: reject_claim
+    # Internal: check policy active, incident within coverage period, type covered by policy
+
+  # ============================================================
+  # Claim Branch: Assess & Approve
+  # ============================================================
+  - name: assess_damage
+    executor: llm
+    prompt: |
+      Assess home damage based on claim details. Call estimate_repair_cost tool.
+      Compare assessed amount against policy coverage limit and deductible.
+    stream: true
+    tool_allowlist: ["estimate_repair_cost", "check_coverage_limit"]
+    context_schema:
+      assessed_amount: float
+      covered_amount: float
+      adjuster_report: dict
+    exit_guard: "assessed_amount > 0"
+    # covered_amount = max(0, assessed_amount - deductible), capped at coverage_limit
+
+  - name: approve_claim
+    executor: llm
+    prompt: "Present claim assessment result to user. Await approval decision."
+    human_review: true
+    review_prompt: |
+      Claim Approval — Home Insurance
+      Policy: {policy_id}
+      Incident: {incident_type} on {incident_date}
+      Damages: {damage_description}
+      Assessed: {assessed_amount} CNY
+      Deductible: {deductible}
+      Covered Amount: {covered_amount} CNY
+      Coverage Limit: {coverage_limit} CNY
+    stream: false
+
+  - name: process_claim_payment
+    executor: code
+    action: execute_claim_payout
+    precondition: "covered_amount > 0 AND policy_id != null"
+    entry_guard: "covered_amount > 0 AND covered_amount <= coverage_limit"
+    data_invariant: "payout executes exactly once (idempotency_key dedup)"
+    context_schema:
+      idempotency_key: str
+      payout_id: str | null
+      payout_status: str | null
+    exit_guard: "payout_id != null AND payout_status == 'completed'"
+    postcondition: "payout_id is persisted"
+    on_error: claim_error_recovery
+
+  - name: reject_claim
+    executor: llm
+    prompt: |
+      Claim rejected. Validation errors: {validation_errors}
+      Explain the rejection reason and suggest next steps (appeal, resubmit, contact support).
+    stream: true
+    context_schema:
+      rejection_reason: str
+
+  # ============================================================
+  # Error Recovery
+  # ============================================================
+  - name: error_recovery
+    executor: llm
+    prompt: "An unexpected error occurred during quote processing. Explain to user and suggest retry."
+    stream: true
+
+  - name: claim_error_recovery
+    executor: llm
+    prompt: "Claim payout processing failed. A support ticket has been created. Status: {payout_status}"
+    tool_allowlist: ["create_support_ticket"]
+    stream: true
+    context_schema:
+      ticket_id: str
+
+  # ============================================================
+  # Terminal
+  # ============================================================
+  - name: done
+    executor: code
+    action: log_conversation
+    description: "Workflow complete; audit log written"
+
+transitions:
+  # Entry routing based on intent
+  - from: start
+    to: collect_property_info
+    guard: "intent == 'get_quote'"
+
+  - from: start
+    to: file_claim
+    guard: "intent == 'file_claim'"
+
+  # === Quote path ===
+  - from: collect_property_info
+    to: collect_coverage_needs
+    guard: "property_type != null AND address != null AND building_age != null"
+
+  - from: collect_property_info
+    to: collect_property_info
+    guard: "context_incomplete"
+
+  - from: collect_coverage_needs
+    to: assess_risk
+    guard: "coverage_type != null AND building_coverage > 0"
+
+  - from: collect_coverage_needs
+    to: collect_coverage_needs
+    guard: "context_incomplete"
+
+  - from: assess_risk
+    to: calculate_premium
+    guard: "exit_guard_pass AND risk_score < 70"
+
+  - from: assess_risk
+    to: high_risk_review
+    guard: "exit_guard_blocked"
+
+  - from: high_risk_review
+    to: calculate_premium
+    guard: "manual_review_approved"
+
+  - from: high_risk_review
+    to: done
+    guard: "manual_review_rejected"
+
+  - from: calculate_premium
+    to: present_quote
+    guard: "exit_guard_pass AND annual_premium > 0"
+
+  - from: calculate_premium
+    to: error_recovery
+
+  - from: present_quote
+    to: confirm_purchase
+    guard: "user_says_yes"
+
+  - from: present_quote
+    to: error_recovery
+
+  - from: confirm_purchase
+    to: done
+
+  # === Claim path ===
+  - from: file_claim
+    to: validate_claim
+    guard: "incident_type != null AND estimated_loss > 0"
+
+  - from: file_claim
+    to: file_claim
+    guard: "context_incomplete"
+
+  - from: validate_claim
+    to: assess_damage
+    guard: "validation_passed == true"
+
+  - from: validate_claim
+    to: reject_claim
+    guard: "validation_passed == false"
+
+  - from: assess_damage
+    to: approve_claim
+    guard: "assessed_amount > 0 AND covered_amount > 0"
+
+  - from: approve_claim
+    to: process_claim_payment
+    guard: "all_approved"
+
+  - from: approve_claim
+    to: reject_claim
+    guard: "any_rejected"
+
+  - from: process_claim_payment
+    to: done
+    guard: "payout_status == 'completed'"
+
+  - from: process_claim_payment
+    to: claim_error_recovery
+    guard: "payout_status in ['failed', 'error']"
+
+  - from: reject_claim
+    to: done
+
+  # === Error recovery ===
+  - from: error_recovery
+    to: done
+
+  - from: claim_error_recovery
+    to: done

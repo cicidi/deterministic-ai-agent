@@ -1,0 +1,18 @@
+[
+  {"ts":"2026-06-16T10:15:00Z","state":"collect_property_info", "action":"llm_query",  "tokens":120, "output":"property_type=apartment,address=88 Nanjing Road..."},
+  {"ts":"2026-06-16T10:15:05Z","state":"collect_property_info", "action":"tool_call",  "tool":"lookup_property_record","args":{"address":"88 Nanjing Road, Shanghai"},"result":{"flood_zone":"low","crime_rate":"low","verified":true}},
+  {"ts":"2026-06-16T10:15:05Z","state":"collect_property_info", "action":"transition", "from":"collect_property_info","to":"collect_coverage_needs","guard":"all_fields_present","result":"passed"},
+  {"ts":"2026-06-16T10:15:12Z","state":"collect_coverage_needs","action":"llm_query",  "tokens":80,  "output":"coverage_type=both,building_coverage=2000000..."},
+  {"ts":"2026-06-16T10:15:12Z","state":"collect_coverage_needs","action":"transition", "from":"collect_coverage_needs","to":"assess_risk","guard":"building_coverage>0","result":"passed"},
+  {"ts":"2026-06-16T10:15:12Z","state":"assess_risk",           "action":"code_exec",  "fn":"compute_risk_score","input":{"building_age":11,"material":"concrete","flood_zone":"low","crime_rate":"low"},"result":{"risk_score":18,"risk_factors":["concrete_structure","low_flood_zone","low_crime"],"rate_multiplier":0.872}},
+  {"ts":"2026-06-16T10:15:12Z","state":"assess_risk",           "action":"transition", "from":"assess_risk","to":"calculate_premium","guard":"exit_guard_pass","result":"passed"},
+  {"ts":"2026-06-16T10:15:12Z","state":"calculate_premium",     "action":"code_exec",  "fn":"compute_home_premium","input":{"building_coverage":2000000,"rate_multiplier":0.872},"result":{"annual_premium":6104,"monthly_premium":508.67,"discount_applied":0}},
+  {"ts":"2026-06-16T10:15:12Z","state":"calculate_premium",     "action":"transition", "from":"calculate_premium","to":"present_quote","guard":"annual_premium<50000","result":"passed"},
+  {"ts":"2026-06-16T10:15:18Z","state":"present_quote",         "action":"llm_generate","tokens":95,"output":"Here's your home insurance quote..."},
+  {"ts":"2026-06-16T10:15:30Z","state":"present_quote",         "action":"interrupt",  "reason":"human_review","context":{"property_type":"apartment","address":"88 Nanjing Road","annual_premium":6104,"coverage_type":"both"}},
+  {"ts":"2026-06-16T10:16:12Z","state":"present_quote",         "action":"human_approve","approver":"agent_wang","comment":"Standard quote, approved"},
+  {"ts":"2026-06-16T10:16:15Z","state":"present_quote",         "action":"transition", "from":"present_quote","to":"confirm_purchase","guard":"user_says_yes","result":"passed"},
+  {"ts":"2026-06-16T10:16:15Z","state":"confirm_purchase",      "action":"code_exec",  "fn":"create_home_policy","input":{"property_type":"apartment","address":"88 Nanjing Road","building_coverage":2000000,"contents_coverage":500000,"annual_premium":6104,"riders":["fire","theft"]},"result":{"policy_id":"HOM-2026-00142","status":"active","effective_date":"2026-06-16"}},
+  {"ts":"2026-06-16T10:16:15Z","state":"confirm_purchase",      "action":"transition", "from":"confirm_purchase","to":"done"},
+  {"ts":"2026-06-16T10:16:15Z","state":"done",                  "action":"complete",   "workflow":"home_insurance","version":"1.0","conversation_id":"conv-2026-00142","total_states_visited":7,"total_llm_tokens":295}
+]

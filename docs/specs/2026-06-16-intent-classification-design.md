@@ -2,6 +2,7 @@
 
 > Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
 > Focused on: Intent classification within the UNDERSTAND layer.
+> All concrete intent examples have been extracted to [examples/home-insurance/](../../examples/home-insurance/).
 
 ---
 
@@ -10,6 +11,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-16 | 0.1.0 | Initial intent classification spec |
+| 2026-06-16 | 0.2.0 | Extract custom intent examples to examples/; fix section numbering |
 
 ---
 
@@ -36,24 +38,7 @@ It maps a free-form user utterance to a predefined intent label, optionally with
 
 ### 2.2 Custom Intents (per-workflow)
 
-Each workflow can define additional domain-specific intents. Example for an insurance workflow:
-
-```
-intents:
-  - name: get_quote
-    description: User wants an insurance premium quote
-    keywords: [quote, price, cost, how much, 报价]
-    examples:
-      - "I want to get a car insurance quote"
-      - "How much for home insurance?"
-
-  - name: file_claim
-    description: User wants to file an insurance claim
-    keywords: [claim, accident, damage, 理赔]
-    examples:
-      - "I need to file a claim"
-      - "My car was damaged in an accident"
-```
+Each workflow can define additional domain-specific intents. For a complete catalog of home insurance intents with keywords and examples, see [intent-definitions.md](../../examples/home-insurance/intent-definitions.md). The framework uses the same `IntentDef` schema for both system and custom intents.
 
 ### 2.3 Intent Definition Schema
 
@@ -97,7 +82,7 @@ The framework builds a system prompt from the user's intent definitions and conv
 
 Temperature is set to 0 for deterministic classification.
 
-### 3.2 Fallback: Keyword Matching
+### 3.4 Fallback: Keyword Matching
 
 If the LLM call fails or returns `confidence < threshold`, the framework runs keyword matching against the user's input:
 
@@ -109,11 +94,11 @@ For each intent:
 
 System intents have built-in keyword patterns. Custom intents use user-provided `keywords`.
 
-### 3.3 Confidence Threshold
+### 3.5 Confidence Threshold
 
 A configurable threshold (default `0.7`). When the LLM returns `confidence < threshold`, the result is treated as `unrecognized_intent`, which triggers a clarification response from Layer 3.
 
-### 3.4 Merge Strategy
+### 3.6 Merge Strategy
 
 ```
 1. Try LLM classification

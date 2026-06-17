@@ -11,6 +11,7 @@
 | 2026-06-16 | 0.1.0 | Initial three-layer architecture |
 | 2026-06-16 | 0.2.0 | Reset to minimal version for step-by-step discussion |
 | 2026-06-16 | 0.3.0 | Add cross-reference to state machine design; translate appendix to English |
+| 2026-06-16 | 0.4.0 | Add examples reference; unify all examples under home insurance domain |
 
 ---
 
@@ -52,7 +53,9 @@ For example, within Layer 2, a routing node might be a pure `switch` statement (
 
 ## 4. Related Design Documents
 
-- **[State Machine Design](./2026-06-16-state-machine-design.md)** — Detailed FSM layer design: transitions + LangGraph fusion, state metadata (preconditions, guards, invariants), insurance quote / invoice / payment use cases, and FSM-specific open questions.
+- **[State Machine Design](./2026-06-16-state-machine-design.md)** — Detailed FSM layer design: transitions + LangGraph fusion, state metadata (preconditions, guards, invariants), intent+state resolution, and FSM-specific open questions.
+- **[Intent Classification Design](./2026-06-16-intent-classification-design.md)** — Layer 1 intent classification strategy: LLM-first + keyword fallback, output contract, conversation context.
+- **[Home Insurance Examples](../examples/home-insurance/)** — Complete workflow definition (`workflow.yaml`), intent catalog, end-to-end scenarios, and audit log sample.
 
 ---
 
