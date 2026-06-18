@@ -12,6 +12,8 @@
 | 2026-06-16 | 0.3.0 | Add invoice and payment use cases; full English translation |
 | 2026-06-16 | 0.4.0 | Add Section 8: Intent + State resolution (per-state intent policy, confirmation flow) |
 | 2026-06-16 | 0.5.0 | Extract all examples to examples/home-insurance/; remove invoice/payment appendices; unify on home insurance domain |
+| 2026-06-17 | 0.6.0 | Term consistency (errorNode, agentState.phase); add References section |
+| 2026-06-17 | 0.7.0 | Add Section 1.1: Implementation Approaches (YAML-Only vs Code-First vs Hybrid) |
 
 ---
 
@@ -20,6 +22,101 @@
 > **transitions defines WHAT (business correctness). LangGraph executes HOW (conversation infrastructure).**
 >
 > Developers maintain only the transitions definition. The LangGraph graph, LLM nodes, checkpointing, and interrupt are all auto-generated.
+
+---
+
+## 1.1 Implementation Approaches
+
+Three architectural options for implementing the state machine layer. All three share the same `transitions` mental model; they differ in *how* the definition is authored and consumed.
+
+### Option A: YAML-Only Declarative (Current Approach)
+
+States and transitions are defined purely in YAML. No code touches the state graph directly — the framework auto-generates the LangGraph graph at startup.
+
+```yaml
+# transitions.yaml
+states:
+  - name: collect_info
+    executor: llm
+    intent_policy:
+      accept: [provide_information, ask_question]
+      on_unlisted: ask_confirm
+  - name: calculate_premium
+    executor: code
+    action: compute_premium
+
+transitions:
+  - from: collect_info
+    to: calculate_premium
+    guard: "context_complete"
+```
+
+**Pros:** Fully auditable (YAML is human-readable), no code-generation step, entire workflow is version-controlled as a single YAML artifact.
+
+**Cons:** Complex guard logic is cumbersome in a string expression language. Runtime control flow lives entirely inside the framework generator.
+
+### Option B: Code-First LangGraph
+
+States are defined programmatically in Python. The developer constructs LangGraph nodes directly; the framework provides helper decorators and base classes but does NOT generate the graph from YAML.
+
+```python
+from framework import StateNode, Transition, build_graph
+
+collect_info = StateNode(
+    name="collect_info",
+    executor="llm",
+    intent_policy={"accept": ["provide_information"], "on_unlisted": "ask_confirm"},
+)
+
+calculate_premium = StateNode(
+    name="calculate_premium",
+    executor="code",
+    action=compute_premium,
+)
+
+collect_info >> Transition(to=calculate_premium, guard="context_complete")
+
+graph = build_graph([collect_info, calculate_premium])
+```
+
+**Pros:** Guards can be arbitrary Python functions (`guard=lambda ctx: ctx.risk_score > 80 and ctx.amount > 5000`). Full IDE support (autocomplete, type-checking, refactoring). Easier unit testing of individual nodes.
+
+**Cons:** Less auditable — non-technical stakeholders cannot read the state machine. The graph definition is spread across Python files rather than in a single declarative artifact. Risk of imperative leaks (business logic mixed with graph construction).
+
+### Option C: Hybrid (YAML Base + Code Overrides)
+
+A YAML file defines the base structure (states, transitions, metadata). Complex guard functions, custom validators, and tool bindings are implemented in Python and referenced by name from the YAML.
+
+```yaml
+# transitions.yaml
+states:
+  - name: assess_risk
+    executor: code
+    action: assess_risk
+    exit_guard: high_risk_override  # references a Python function
+```
+
+```python
+# guards.py
+def high_risk_override(ctx: AgentState) -> bool:
+    return ctx.risk_score > 80 and ctx.total_claims > 3
+```
+
+**Pros:** Best of both worlds — YAML for structure/auditability, Python for complex logic. Guards stay readable while supporting arbitrary complexity.
+
+**Cons:** Two artifacts to maintain per workflow. Risk of drift between the YAML declaration and the code implementation.
+
+### Comparison Matrix
+
+| Dimension | Option A: YAML-Only | Option B: Code-First | Option C: Hybrid |
+|-----------|--------------------|----------------------|------------------|
+| **Determinism** | High — pure data-driven | High — code is deterministic | Medium-High — code overrides introduce flexibility |
+| **Developer-Friendliness** | Medium — YAML is simple but guards are limited | High — full IDE support, type safety | Medium — YAML base is simple, code overrides require discipline |
+| **Auditability** | High — single YAML file, non-technical readable | Low — spread across Python files | Medium — YAML for structure, Python for details |
+| **Flexibility** | Low — guard expression language is minimal | High — arbitrary Python for guards/validators | Medium — constrained to YAML structure, flexible on details |
+| **Version Control** | Excellent — single YAML diff tells the whole story | Good — but state machine logic scatters across files | Good — YAML diffs + code diffs must be reviewed together |
+
+**Default recommendation: Option A (YAML-Only) for most use cases.** Use Option C (Hybrid) when guard logic becomes too complex for expression-language guards. Option B (Code-First) is available for teams that prefer Python-native workflows and do not require non-technical auditability.
 
 ---
 
@@ -82,12 +179,14 @@ Each state can carry 5 types of metadata, enforced at different points in the st
 | Concept | Trigger Timing | Failure Behavior | Purpose |
 |---------|---------------|------------------|---------|
 | **precondition** | Before entry | Does not block runtime; static analysis reports contract violation | Design contract for test generation |
-| **entry_guard** | At entry | Runtime rejection; routes to fallback or error state | Runtime safety gate |
+| **entry_guard** | At entry | Runtime rejection; routes to errorNode | Runtime safety gate |
 | **data_invariant** | Throughout state lifetime | Runtime AssertionError; interrupts workflow | Runtime data integrity protection |
 | **exit_guard** | At exit | Runtime block; routes to alternate branch | Branch routing based on computed result |
 | **postcondition** | After exit | Does not block runtime; verification tool reports violation | Ensures action function output contract |
 
 > **Note on static verification:** The "static analysis" and "verification tool" referenced above refers to a planned YAML linter and test generator (design TBD) that reads preconditions, postconditions, and invariants to catch contract violations before deployment. This tooling is out of scope for the current design document; see Appendix C.7 for related open questions.
+>
+> **Note on errorNode:** errorNode provides unified error handling, defined in Routing & Execution spec Section 6.
 
 ### 3.2 Example Patterns
 
@@ -100,7 +199,7 @@ Each state can carry 5 types of metadata, enforced at different points in the st
                       (entry_guard / exit_guard)     (precondition / postcondition)
 
   Timing              Runtime                         Offline (static analysis / test generation)
-  Failure behavior    Routes to fallback / error       Marks as "contract violation", does not block execution
+     Failure behavior    Routes to errorNode       Marks as "contract violation", does not block execution
   Typical use         "age < 18 -> direct reject"      "This state declares it needs age; generate test with age<18"
   Expression req.     Must be runtime-evaluable        Can be descriptive comment or formal formula
 ```
@@ -132,7 +231,7 @@ states:
     review_prompt:    "what the approver sees"
     stream:           true | false           # whether to stream LLM output
     on_exit:          "callback function run after state completes"
-    on_error:         <fallback_state>       # state to enter on unhandled error
+     on_error: errorNode            # state to enter on unhandled error
     description:      "human-readable note about what this state does"
 
     # --- Guard Meta-Variables (framework-generated, usable in guard expressions) ---
@@ -299,6 +398,18 @@ For concrete intent+state resolution examples within home insurance workflows, s
 - **Retry counters** are independent of intent resolution. A user who triggers `ask_confirm` does not consume a retry attempt — only invalid data inputs (wrong name, wrong code) increment retries.
 - **Sensitive field scrubbing** happens on state exit regardless of whether the exit was triggered by a normal transition, a `decline`, or a confirmed intent switch.
 
+> **Note on phase routing:** The resolved intent+state maps to `agentState.phase`, which drives the phase-aware routing with return stack (defined in Routing & Execution spec Section 4).
+
+## References
+
+- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+- [Domain Model](./2026-06-17-domain-model-design.md)
+- [Routing & Execution](./2026-06-17-routing-execution-layer-design.md)
+- [Extraction Layer](./2026-06-17-extraction-layer-design.md)
+- [Intent Classification](./2026-06-16-intent-classification-design.md)
+- [transitions Library](https://github.com/pytransitions/transitions)
+- [LangGraph](https://github.com/langchain-ai/langgraph)
+
 ## Appendix C: Implementation Planning — Open Questions (State Machine)
 
 > Questions identified during design but deferred for implementation planning.
@@ -325,7 +436,7 @@ For concrete intent+state resolution examples within home insurance workflows, s
 | 6 | Guard expressiveness boundary: pure functions only? Allow external service calls (DB/API) | Performance, determinism, testability |
 | 7 | Guard conflict resolution — what happens when multiple guards are simultaneously true | Runtime behavioral determinism |
 | 8 | Guard completeness enforcement — how to statically detect uncovered exit guard cases | Prevents runtime deadlock in a state |
-| 9 | Implicit fallback (no-match) design: explicit catch-all vs framework-injected error handler | Compliance — system must not "freeze" |
+| 9 | Implicit errorNode (no-match) design: explicit catch-all vs framework-injected errorNode | Compliance — system must not "freeze" |
 | 10 | Full guard expression grammar (see §3.5 for current syntax) | Developer experience, security |
 
 ### C.3 Parallel States
@@ -342,7 +453,7 @@ For concrete intent+state resolution examples within home insurance workflows, s
 | # | Question | Impact |
 |---|----------|--------|
 | 13 | When code nodes encounter external API failure or DB unavailability, how does the state machine trigger retry/compensation/rollback transitions | State transition reliability |
-| 14 | Global error workflow design — unified fallback target state for all uncaught exceptions | Compliance — state machine must not freeze or silently fail |
+| 14 | Global error workflow design — unified errorNode for all uncaught exceptions | Compliance — state machine must not freeze or silently fail |
 
 ### C.5 Version Migration
 

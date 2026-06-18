@@ -12,6 +12,9 @@
 | 2026-06-16 | 0.2.0 | Reset to minimal version for step-by-step discussion |
 | 2026-06-16 | 0.3.0 | Add cross-reference to state machine design; translate appendix to English |
 | 2026-06-16 | 0.4.0 | Add examples reference; unify all examples under home insurance domain |
+| 2026-06-17 | 0.5.0 | Add framework design principles (conventions, JSON guardrails, permission model) |
+| 2026-06-17 | 0.6.0 | Term consistency: errorNode, phase-aware routing; add YAML schema overview; mark resolved open questions |
+| 2026-06-17 | 0.7.0 | Add Context Hydration layer: pre-processing step loads history, state, session, external entities before three-layer execution |
 
 ---
 
@@ -19,12 +22,20 @@
 
 Enterprise chatbots in regulated industries (finance, health, insurance) need to be auditable and predictable—but users speak natural language. A purely rule-based system can't understand users; a purely LLM-driven system can't guarantee correctness.
 
-## 2. Core Architecture: Three Layers
+## 2. Core Architecture: Context Hydration + Three Layers
+
+Every workflow interaction begins with a **Context Hydration** step that loads the latest data relevant to the current business state. It does NOT call all APIs blindly — it selectively refreshes `AgentState` with data the current task actually needs.
 
 ```
 User Input
    |
    v
++-----------------------+
+| Context Hydration      |  -> "What data does this task need right now?"
+| Selectively refresh    |     Load only business-relevant data:
+| AgentState data        |     e.g., insurance application form data
++-----------+-----------+     to determine the next task step
+            v
 +-----------------------+
 | Layer 1: UNDERSTAND   |  -> "What does the user want?"
 | Intent + Entities     |
@@ -41,9 +52,62 @@ User Input
 +-----------------------+
 ```
 
+- **Context Hydration** selectively loads the latest data needed by the current business task — refreshing `AgentState` with current application form data, claim status, or payment history — so the framework knows exactly what the next step should be. It does NOT load unrelated CRM entities or exhaust all available APIs.
 - **Layer 1** extracts intent and structured entities from free-form user input.
 - **Layer 2** decides the next state, validates data, and performs deterministic business logic.
 - **Layer 3** produces the user-visible response.
+
+### 2.1 YAML Schema Overview (Context Hydration + Three Layers)
+
+```yaml
+workflow:
+  context_hydration:
+    always_load:           # always refreshed every turn
+      - source: checkpoint_db
+        fields: [conversation_history, persisted_agentState]
+      - source: session_store
+        fields: [user_profile, oauth_scopes]
+    on_phase_entry:        # refreshed when entering this phase
+      collect_property_info:
+        - source: application_service   # load current application form
+          fields: [property_type, address, building_age, floor_area]
+      process_payment:
+        - source: payment_gateway
+          fields: [outstanding_balance, payment_methods]
+  layers:
+    understand:
+      nodes: [classify_intent, extract_entities]
+    decide:
+      nodes: [route, validate, execute, fallback]
+    respond:
+      nodes: [generate_response]
+  mode: deterministic
+```
+
+### 2.2 Context Hydration — How It Works
+
+Context Hydration is **selective** — it only refreshes data that the current business task depends on. The framework determines what to load based on the current `agentState.phase` and the entity bindings in the domain model.
+
+**Example (insurance quote):**
+
+```
+agentState.phase = "collect_coverage_needs"
+    → domain model state binds entity: "property_info"
+    → load current application form data for property_info
+    → detect: property_type = "house", building_age = 5, address = null
+    → determine next task: ask for address
+```
+
+**Not loaded:** CRM history, payment data, claim records — irrelevant to the quote task. Only the application form fields for the current phase are refreshed.
+
+**Hydration Sources:**
+
+| Source | When Loaded | What's Hydrated |
+|--------|------------|-----------------|
+| **Checkpoint DB** | Every turn | Conversation history + persisted `AgentState` |
+| **Session Store** | Every turn | User profile, OAuth scopes |
+| **Domain Entity API** | On phase entry | Current entity data for the bound entity (e.g., application form state) |
+| **External Business API** | Conditional | Only when a node's code executor declares a dependency (e.g., `payment_gateway` in `process_payment` state) |
 
 ## 3. Key Insight: Per-Node Control, Not Per-Layer
 
@@ -51,15 +115,105 @@ The LLM/deterministic decision is not made at the layer level. Each individual n
 
 For example, within Layer 2, a routing node might be a pure `switch` statement (deterministic), while the node next to it might use LLM for semantic validation (LLM). Layers describe *what* happens; nodes describe *how*.
 
-## 4. Related Design Documents
+## 4. Framework Design Principles
+
+### 4.1 Framework as Interface + Pattern Injection
+
+The framework exposes clean interfaces for developers to implement business logic. Internally, it injects proven patterns that handle the "dirty work" — so the developer focuses on business logic, not infrastructure:
+
+| Framework Concern | Patterns Injected |
+|-------------------|-------------------|
+| LLM guardrails | JSON schema validation, field presence check, type coercion |
+| Permission enforcement | Per-node tool allowlist + transition allowlist |
+| Retry budgets | Per-node retry count + errorNode unified handling |
+| Audit trail | Every decision, extraction, and transition logged |
+| Deterministic fallback | Regex/keyword fallback for every extractable field |
+| State awareness | Current FSM state injected into every LLM prompt |
+| Phase-aware routing + return stack |
+| Sub-workflow reuse | Shared capabilities defined once, invoked from any state |
+
+All LLM interactions produce structured JSON output with framework-enforced guardrails (schema check, field presence, type coercion). Free-text generation is limited to Layer 3.
+
+**Interface philosophy:** The developer implements `ExtractionNode.execute()`, `ValidatorNode.validate()`, `TransformNode.transform()`, etc. The framework handles everything around it.
+
+### 4.2 Code Conventions
+
+- Every method ≤ **50 lines**
+- Every file ≤ **1000 lines**
+- Executors are small, composable, and single-responsibility
+- Complex sub-workflows split across files and sub-workflows
+- Reusable logic extracted into shared modules
+
+### 4.3 LLM Output is JSON — Always
+
+All LLM interactions produce **structured JSON output**. The framework enforces output validation guardrails:
+
+1. **Schema check** — output must match the declared JSON schema
+2. **Field presence** — required fields must be present and non-null
+3. **Type coercion** — `"123"` → `123` when schema expects `int`
+4. **Retry on violation** — invalid output auto-retries (within retry budget)
+
+Free-text generation is limited to **Layer 3 (Response)**. Layer 1 and Layer 2 LLM outputs are always structured JSON.
+
+### 4.4 Permission Model (Overview)
+
+Every node has a permission set defining what it can access:
+
+```
+NodePermission {
+  allowed_tools:      string[]    // which tools this node can call
+  allowed_transitions: string[]   // which nodes this node can transition to
+  max_retries:        int         // retry budget for this node
+}
+```
+
+Tools are categorized with metadata:
+
+```
+ToolMeta {
+  name:        string
+  type:        "api" | "mcp" | "command" | "llm"
+  access_level: "read" | "write" | "sensitive_data_read" | "dangerous_operation_write"
+  execute():   Result        // tool execution method
+}
+```
+
+Permission enforcement happens at two levels:
+
+1. **Config-level** — statically declared in workflow YAML (node/tool allowlists)
+2. **OAuth / Role-based** — dynamic enforcement based on authenticated user's role at runtime
+
+Detailed permission design in [Routing & Execution Layer](./2026-06-17-routing-execution-layer-design.md).
+
+## 5. Related Design Documents
 
 - **[State Machine Design](./2026-06-16-state-machine-design.md)** — Detailed FSM layer design: transitions + LangGraph fusion, state metadata (preconditions, guards, invariants), intent+state resolution, and FSM-specific open questions.
 - **[Intent Classification Design](./2026-06-16-intent-classification-design.md)** — Layer 1 intent classification strategy: LLM-first + keyword fallback, output contract, conversation context.
+- **[Extraction Layer Design](./2026-06-17-extraction-layer-design.md)** — Layer 1 entity extraction: Extract/Validate/Transform pipeline with multiple implementation options.
+- **[Domain Model Design](./2026-06-17-domain-model-design.md)** — Single source of truth: Entity + State + Transition schemas, cross-workflow reuse.
+- **[Routing & Execution Layer Design](./2026-06-17-routing-execution-layer-design.md)** — Layer 2 routing and execution: business logic, decision nodes, phase-aware routing, retry budgets, sub-workflow reuse, permission model.
 - **[Home Insurance Examples](../examples/home-insurance/)** — Complete workflow definition (`workflow.yaml`), intent catalog, end-to-end scenarios, and audit log sample.
+
+## 6. Downstream: Skill-Assisted Spec Generation
+
+This spec document suite serves a dual purpose:
+
+1. **Framework design reference** — documents the deterministic workflow architecture and design decisions
+2. **Interview template** — a downstream skill loads these specs and, through guided Q&A, helps a developer produce a complete product-specific deterministic AI agent specification, ready for code implementation planning
+
+```
+Developer describes their product (e.g., "insurance claims chatbot")
+    → Skill loads framework specs as interview template
+    → Skill asks product-specific, spec-by-spec questions
+    → Skill outputs a complete, product-specific spec
+    → Developer proceeds to implementation planning
+```
+
+The framework specs are designed with clear decision boundaries: **"framework decision"** (reused across all products) vs. **"user decision"** (asked by the skill per product). The interview flow will be formalized after all spec documents are complete.
 
 ---
 
-## References
+## 7. References
 
 1. LangGraph — State graph execution framework (runtime substrate). *github.com/langchain-ai/langgraph*
 2. Rasa CALM — "The LLM understands; the code enforces." *rasa.com*
@@ -79,7 +233,7 @@ For example, within Layer 2, a routing node might be a pure `switch` statement (
 |---|----------|--------|
 | 1 | LLM node error handling — recovery strategies for timeout, hallucination, tool call failure | Conversation continuity |
 | 2 | LLM node testing — how to verify behavior without real LLM calls | Test stability, CI speed |
-| 3 | LLM scope enforcement — how to ensure LLM only handles Layer 1 (understanding) and Layer 3 (response), not Layer 2 (decisions) | Architecture enforceability |
+| 3 | LLM scope enforcement — how to ensure LLM only handles Layer 1 (understanding) and Layer 3 (response), not Layer 2 (decisions) | Addressed by Decision 5: per-node granularity, not per-layer enforcement |
 | 4 | Context filtering — what data can be passed to LLM, sensitive field masking rules | PII/GDPR compliance |
 
 ### A.2 Security & Compliance
