@@ -9,8 +9,9 @@
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-06-17 | 0.1.0 | Initial observability spec: metrics, Grafana dashboards, alert rules, LangSmith/Prometheus/Grafana integration |
-| 2026-06-17 | 0.2.0 | §3.4: replace Grafana dashboard JSON with YAML schema; §4.2: replace executable alert rules YAML with schema descriptions; add §7 Implementation Options (Grafana+Prometheus, Datadog, OpenTelemetry) with comparison matrix |
+| 2026-06-17 | 0.1.0 | Initial observability spec |
+| 2026-06-17 | 0.2.0 | Replace Grafana JSON with YAML schema; add Implementation Options |
+| 2026-06-17 | 0.3.0 | Add LangFuse as Option B; all providers pluggable via ObservabilityProvider interface |
 
 ---
 
@@ -622,7 +623,15 @@ observability:
 
 ## 7. Implementation Options
 
-### 7.1 Option A: Grafana + Prometheus (Current Baseline)
+All observability providers are pluggable via the `ObservabilityProvider` interface — same pattern as rule engines and LLM providers. Choose one per environment:
+
+```yaml
+# framework.yaml
+observability:
+  provider: grafana_prometheus    # grafana_prometheus | langfuse | datadog | opentelemetry
+```
+
+### 7.1 Option A: Grafana + Prometheus (Self-Hosted OSS)
 
 Self-hosted open-source stack. Prometheus scrapes the framework's `/metrics` endpoint; Grafana renders dashboards and evaluates alert rules via Alertmanager.
 
@@ -632,7 +641,42 @@ Self-hosted open-source stack. Prometheus scrapes the framework's `/metrics` end
 | Weaknesses | Operational burden (run and maintain Prometheus, Grafana, Alertmanager); storage scaling (Prometheus TSDB); no built-in log aggregation; multi-cluster federation is complex |
 | Best for | Teams with existing Kubernetes/Prometheus infrastructure; cost-sensitive deployments; open-source-first organizations |
 
-### 7.2 Option B: Datadog
+### 7.2 Option B: LangFuse (LLM-Specific Observability)
+
+Open-source LLM observability platform focused on tracing, prompt management, and evaluation. Designed specifically for LLM applications — captures LLM calls, token usage, cost, and latency out of the box.
+
+```yaml
+# framework.yaml
+observability:
+  provider: langfuse
+  langfuse:
+    public_key: "${LANGFUSE_PUBLIC_KEY}"
+    secret_key: "${LANGFUSE_SECRET_KEY}"
+    host: "https://cloud.langfuse.com"   # cloud | self-hosted
+    tracing:
+      enabled: true
+      sample_rate: 1.0
+    prompt_management:
+      enabled: true                      # version and track prompts
+    evaluation:
+      enabled: true                      # run evals from evals-create skill
+    cost_tracking:
+      enabled: true                      # per-model, per-conversation token cost
+    metrics:
+      llm_latency: true                  # p50/p95/p99 per model
+      token_usage: true                  # prompt + completion tokens
+      cost: true                         # estimated USD cost
+      completion_rate: true              # goal_check pass rate
+      error_rate: true                   # schema violations, retry rate
+```
+
+| Aspect | Detail |
+|--------|--------|
+| Strengths | Purpose-built for LLM apps; zero-config LLM tracing (auto-instruments OpenAI/Anthropic calls); prompt versioning and A/B testing; built-in eval runner; open-source with self-host option |
+| Weaknesses | Not a general observability platform (no infra metrics, no APM); dashboarding less flexible than Grafana; smaller community than Datadog/Prometheus |
+| Best for | LLM-centric teams; prompt engineering workflows; eval-driven development; cost-conscious deployments |
+
+### 7.3 Option C: Datadog (SaaS APM)
 
 SaaS observability platform. The framework emits metrics, traces, and logs to the Datadog agent; dashboards and alerts are configured in the Datadog UI or via Terraform/dd-agent YAML.
 
@@ -669,7 +713,7 @@ observability:
 | Weaknesses | Per-host pricing can be expensive at scale; vendor lock-in; custom metrics cost extra; data residency concerns for regulated industries |
 | Best for | Teams without dedicated observability infra; organizations already on Datadog; rapid setup with minimal ops |
 
-### 7.3 Option C: OpenTelemetry (Vendor-Neutral)
+### 7.4 Option D: OpenTelemetry (Vendor-Neutral)
 
 The framework instruments with the OpenTelemetry SDK (traces, metrics, logs). An OTel Collector receives and exports telemetry to the backend(s) of choice — Prometheus, Datadog, Grafana Cloud, or any OTLP-compatible backend.
 
@@ -704,20 +748,20 @@ observability:
 | Weaknesses | OTel is still maturing (metrics SDK stable, logs SDK experimental); added collector component to run; fewer turnkey dashboards than native solutions |
 | Best for | Multi-cloud or multi-vendor strategy; teams planning backend migrations; organizations standardizing on OTel |
 
-### 7.4 Comparison Matrix
+### 7.5 Comparison Matrix
 
-| Dimension | Option A (Grafana+Prometheus) | Option B (Datadog) | Option C (OpenTelemetry) |
-|-----------|------------------------------|--------------------|--------------------------|
-| Vendor lock-in | None (open source) | High (proprietary) | None (open standard) |
-| Operational burden | High (self-hosted) | Low (SaaS, fully managed) | Medium (run OTel Collector) |
-| Cost structure | Infrastructure only | Per-host + per-custom-metric | Infrastructure (Collector) + backend |
-| Logs + metrics + traces | Separate tools (Loki + Prometheus + Tempo) | Unified platform | Unified SDK → any backend |
-| Dashboard richness | High (community + custom) | Very high (built-in + custom) | Dependent on backend |
-| Anomaly detection | Manual thresholds | Built-in ML-based | Dependent on backend |
-| Setup time | Hours (manual provisioning) | Minutes (agent install) | Hours (Collector + backend config) |
-| Compliance / data residency | Fully controlled (self-hosted) | Regional endpoints available | Controlled by Collector + backend choice |
-| Ecosystem maturity | Very mature | Very mature | Maturing (metrics stable, logs beta) |
-| Migration path | Native PromQL queries | Proprietary query language | Swap OTLP endpoint to change backends |
+| Dimension | Option A (Grafana+Prometheus) | Option B (LangFuse) | Option C (Datadog) | Option D (OpenTelemetry) |
+|-----------|------------------------------|---------------------|--------------------|--------------------------|
+| Focus | General infrastructure | LLM-specific | General APM | Vendor-neutral standard |
+| LLM auto-instrumentation | Manual setup | ✅ Built-in | Requires custom spans | Via OTel SDK |
+| Prompt management | ❌ | ✅ Versioning + A/B | ❌ | ❌ |
+| Eval runner | ❌ | ✅ Built-in | ❌ | ❌ |
+| Cost tracking | Manual | ✅ Per-model/call | Via custom metrics | Via OTel metrics |
+| Vendor lock-in | None (OSS) | Low (OSS self-host option) | High (proprietary) | None (open standard) |
+| Operational burden | High (self-hosted) | Medium (cloud or self-host) | Low (SaaS) | Medium (run Collector) |
+| Dashboard richness | High | Medium (LLM-focused) | Very high | Dependent on backend |
+| Best for | Infra + LLM combined | LLM-centric teams | Full-stack APM | Multi-cloud/vendor strategy |
+| Self-host option | ✅ (all components) | ✅ | ❌ | ✅ (Collector + backend) |
 
 ---
 
