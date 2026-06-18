@@ -406,9 +406,9 @@ Each intent is mapped to a typed extraction payload consumed by the Extract node
 | `ambiguous_request` | — | `AmbiguousRequestPayload` | `possible_intents: str[]`, requires user disambiguation |
 | `out_of_scope` | — | *(skip extraction)* | route to out-of-scope response node |
 | `ask_question` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
-| `help` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
 | `chitchat` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
-| `repeat` | ReadOnlyAgent | *(skip extraction)* | replay last assistant message |
+| `help` | — | *(skip extraction)* | deterministic capabilities listing |
+| `repeat` | — | *(skip extraction)* | replay last assistant message |
 | `provide_information` | — | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
 | `complaint` | EscalationAgent | `ComplaintIntentPayload` | `subject: str, details: str` |
 | `escalate` | EscalationAgent | `EscalateIntentPayload` | `reason: str, urgency: str` |

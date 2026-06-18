@@ -53,15 +53,15 @@ Answers questions, retrieves information, handles casual conversation. **Cannot 
 from typing import Protocol, Any
 
 class ReadOnlyAgent(Protocol):
-    """Agent for information retrieval and Q&A. Read-only — no state mutation.
+    """Agent for casual conversation and RAG-based Q&A. Read-only — no state mutation.
 
-    Assigned intents:
-        - ask_question
-        - help
-        - chitchat
-        - repeat
-        - check_coverage (domain-specific: policy lookup)
-        - ask_about_claim_status (domain-specific: claim status lookup)
+    Only two use cases:
+        1. chitchat       — casual social conversation
+        2. ask_question   — open-ended questions answered via RAG retrieval
+
+    NOT assigned to this agent (deterministic, handled by state machine):
+        - help, repeat, check_coverage, ask_about_claim_status → deterministic lookups
+    """
 
     Backend examples:
         - A RAG pipeline backed by Haystack/LlamaIndex/LangChain
@@ -169,13 +169,9 @@ The state machine resolves which agent handles a given intent:
 ```
 def dispatch_agent(intent: str, intent_defs: dict) -> type[Protocol]:
     agent_map = {
-        # ReadOnlyAgent intents
+        # ReadOnlyAgent intents (RAG-backed only)
         "ask_question":          ReadOnlyAgent,
-        "help":                  ReadOnlyAgent,
         "chitchat":              ReadOnlyAgent,
-        "repeat":                ReadOnlyAgent,
-        "check_coverage":        ReadOnlyAgent,     # policy lookup → read
-        "ask_about_claim_status": ReadOnlyAgent,     # claim lookup → read
 
         # EscalationAgent intents
         "escalate":              EscalationAgent,
