@@ -6,28 +6,28 @@ Last updated: 2026-06-17
 
 ## Skills — Done
 
-| Skill | 说明 |
-|-------|------|
-| ✅ **issue-create** | 从 spec 讨论生成结构化 GitHub issue |
-| ✅ **implement-interview** | 访谈式加载 11 篇 spec + brainstorming，产出产品级 implement plan。**这就是 spec-generator（VISION.md 核心愿景）** |
-| ✅ **evals-create** | 生成 goal definition + goal check eval + response eval + intent eval + decision eval |
-| ✅ **ai-cowork-install** | 安装配置 ai-coworker，注册 MCP server，sync 到所有 AI 工具 |
+| Skill | Description |
+|-------|-------------|
+| ✅ **issue-create** | Generate structured GitHub issues from spec discussions |
+| ✅ **implement-interview** | Interview-based loading of 11 specs + brainstorming, produces product-level implement plan. **This is the spec-generator (VISION.md core vision)** |
+| ✅ **evals-create** | Generate goal definition + goal check eval + response eval + intent eval + decision eval |
+| ✅ **ai-cowork-install** | Install and configure ai-coworker, register MCP server, sync to all AI tools |
 
 ---
 
 ## Skills — Planned
 
-| Skill | 说明 | 优先级 |
-|-------|------|--------|
-| 🔲 **intent-analysis** | 分析 prod log，发现未处理 intent，生成 gap report。原则：今天比昨天好 | P0 |
-| 🔲 **tdd** | 先定义 test case（用户对话、extract node、validate node、decision node、response node）、mock LLM 省 token | P0 |
-| 🔲 **test-client-create** | 模拟 LLM test client 和 agent 对话，测量 complete transaction rate | P1 |
-| 🔲 **code-gen** | 从 implement plan 产出 Python 代码（参考 CrewAI 的 4 个 coding skills） | P1 |
-| 🔲 **spec-generator** | ✅ 已合并到 `implement-interview` — brainstorming + 11 篇 spec → 产品级 spec | P0 |
-| 🔲 **ask-docs** | MCP server 实时查最新 spec API（类似 CrewAI 的 ask-docs skill） | P2 |
-| 🔲 **crewai-adaptor** | 让我们的 workflow 能作为 CrewAI Flow/Crew 的一步运行，互相调用 | P1 |
-| 🔲 **history-labeler** | 基于 history turns，正确处理的标记为 positive example，错误的标记为 negative，生成训练/测试数据集。可用现成框架：**Argilla**（数据标注平台）、**Label Studio** | P1 |
-| 🔲 **multi-llm-runner** | 跑测试集同时对比多个 LLM（如 `deepseek-v4 / gpt-4o / claude-sonnet`），输出侧对比准确率；同时测试 client-side LLM 能否正确理解我们的 response。可用现成框架：**promptfoo**（多 LLM 对比测试）、**DeepEval**（指标化评估）、**RAGAS**（RAG 场景评估） | P1 |
+| Skill | Description | Priority |
+|-------|-------------|----------|
+| 🔲 **intent-analysis** | Analyze prod logs, discover unhandled intents, generate gap report. Principle: better than yesterday | P0 |
+| 🔲 **tdd** | Define test cases first (user dialogue, extract node, validate node, decision node, response node), mock LLM to save tokens | P0 |
+| 🔲 **test-client-create** | Simulate LLM test client chatting with agent, measure complete transaction rate | P1 |
+| 🔲 **code-gen** | Generate Python code from implement plan (reference CrewAI's 4 coding skills) | P1 |
+| 🔲 **spec-generator** | ✅ Merged into `implement-interview` — brainstorming + 11 specs → product-level spec | P0 |
+| 🔲 **ask-docs** | MCP server for real-time latest spec API lookup (similar to CrewAI's ask-docs skill) | P2 |
+| 🔲 **crewai-adaptor** | Enable our workflow to run as a CrewAI Flow/Crew step, mutual invocation | P1 |
+| 🔲 **history-labeler** | Based on history turns, label correctly-handled as positive example, incorrect as negative, generate training/test datasets. Existing frameworks: **Argilla** (data labeling platform), **Label Studio** | P1 |
+| 🔲 **multi-llm-runner** | Run test set across multiple LLMs simultaneously (e.g., `deepseek-v4 / gpt-4o / claude-sonnet`), compare accuracy side-by-side; also test whether client-side LLM correctly understands our response. Existing frameworks: **promptfoo** (multi-LLM comparison), **DeepEval** (metric-based evaluation), **RAGAS** (RAG evaluation) | P1 |
 
 ---
 
@@ -49,8 +49,8 @@ Last updated: 2026-06-17
 
 ## Spec Documents — Planned
 
-| # | Spec | Status | 说明 |
-|---|------|--------|------|
+| # | Spec | Status | Description |
+|---|------|--------|-------------|
 | 12 | MCP API Protocol | 🔲 draft v0.1 | Framework API via MCP, compatible with Claude/OpenAI/Google |
 | 13 | Conversation Lifecycle | 🔲 draft v0.1 | create/active/paused/resume/timeout, trace_id=user_id |
 | 14 | Observability & Monitoring | 🔲 draft v0.1 | Grafana dashboards, Prometheus metrics, alert rules |

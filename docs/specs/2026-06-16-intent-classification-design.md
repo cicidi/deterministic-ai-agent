@@ -235,7 +235,7 @@ def validate_intent_combination(intents: ClassifiedIntent[], intent_defs: Intent
         if mode == "error":
             raise MultiIntentConflictError(
                 conflict_intents=[i.intent for i in complex],
-                message="您提到了多个任务，请先选择一个处理。"
+                message="Multiple tasks detected. Please choose one to handle first."
             )
         # sequential: keep highest-confidence, queue the rest
 ```

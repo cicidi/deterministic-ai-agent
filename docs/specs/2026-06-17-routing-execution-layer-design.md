@@ -56,17 +56,17 @@ Multiple nodes read and write to `agentState` — but this does NOT cause race c
 **How it works:**
 
 ```
-Node A 执行:
-  state_copy = agentState.deep_copy()     # 拿副本
-  state_copy.collectedFields["address"] = "Beijing"  # 写副本
-  return {"collectedFields": state_copy.collectedFields}  # 交 update
+Node A execution:
+  state_copy = agentState.deep_copy()     # take a snapshot
+  state_copy.collectedFields["address"] = "Beijing"  # write to copy
+  return {"collectedFields": state_copy.collectedFields}  # submit update
 
-Node B 执行:
-  state_copy = agentState.deep_copy()     # 独立副本
-  state_copy.goal_check = result          # 写副本
-  return {"goal_check": result}           # 交 update
+Node B execution:
+  state_copy = agentState.deep_copy()     # independent copy
+  state_copy.goal_check = result          # write to copy
+  return {"goal_check": result}           # submit update
 
-Framework merge (单线程 reducer):
+Framework merge (single-threaded reducer):
   agentState = merge(updates)  # { collectedFields: {address: "Beijing"}, goal_check: {...} }
 ```
 
