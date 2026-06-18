@@ -4,134 +4,56 @@ Last updated: 2026-06-17
 
 ---
 
-## Skills (Planned)
+## Skills — Done
 
-### 1. intent-analysis
-
-**Status:** 🔲 TODO
-
-**What:** Analyzes production conversation logs to find intents the current intent classifier cannot handle. Outputs a prioritized list of gaps with recommendations.
-
-**Process:**
-1. Load production conversation logs
-2. For each conversation, check: did the intent classifier produce `unrecognized_intent`? Did the user rephrase or retry?
-3. Group unrecognized utterances by semantic similarity
-4. For each cluster, determine:
-   - Is this a new intent we should add?
-   - Is this an edge case of an existing intent?
-   - Is this out of scope (should not handle)?
-5. Output prioritized report: "Today we missed X intents. Yesterday we missed Y. Change: +/-Z"
-
-**Principle:** We can't handle all intents. Target = today better than yesterday.
-
-**When to run:** After each prod deployment, or weekly.
+| Skill | 说明 |
+|-------|------|
+| ✅ **issue-create** | 从 spec 讨论生成结构化 GitHub issue |
+| ✅ **implement-interview** | 访谈式加载 11 篇 spec，产出产品级 implement plan |
+| ✅ **evals-create** | 生成 goal definition + goal check eval + response eval + intent eval + decision eval |
+| ✅ **ai-cowork-install** | 安装配置 ai-coworker，注册 MCP server，sync 到所有 AI 工具 |
 
 ---
 
-### 2. tdd (Test-Driven Development for Workflows)
+## Skills — Planned
 
-**Status:** 🔲 TODO
-
-**What:** After the implement-interview skill produces an implementation plan, this skill generates test cases BEFORE any code is written. Mocks LLMs to save tokens — only calls real LLM when explicitly requested.
-
-**Process:**
-1. Load the implementation plan (from implement-interview)
-2. For each workflow, generate:
-   - **User dialog test cases** — what users say, expected agent responses
-   - **Extract node test cases** — mock user input → expected extracted entities
-   - **Validate node test cases** — entity values → expected validation errors/passes
-   - **Decision node test cases** — entity state → expected routing decisions
-   - **Response node test cases** — outcomes → expected response themes
-3. Mock LLM by default:
-   - `mock_llm = lambda prompt, schema: pre_canned_response_for_this_test_case`
-   - Only when `--use-real-llm` flag is set → call actual LLM API
-4. Run tests:
-   ```
-   uv run pytest tests/ --mock-llm          # fast, free, deterministic
-   uv run pytest tests/ --use-real-llm      # integration test, costs tokens
-   ```
-5. Enforce red-green-refactor cycle
-
-**Principles:**
-- Tests defined before implementation
-- Mock LLM saves tokens (same as traditional API integration test mocking)
-- Only call real LLM when user explicitly says so
+| Skill | 说明 | 优先级 |
+|-------|------|--------|
+| 🔲 **intent-analysis** | 分析 prod log，发现未处理 intent，生成 gap report。原则：今天比昨天好 | P0 |
+| 🔲 **tdd** | 先定义 test case（用户对话、extract node、validate node、decision node、response node）、mock LLM 省 token | P0 |
+| 🔲 **test-client-create** | 模拟 LLM test client 和 agent 对话，测量 complete transaction rate | P1 |
+| 🔲 **code-gen** | 从 implement plan 产出 Python 代码（参考 CrewAI 的 4 个 coding skills） | P1 |
+| 🔲 **spec-generator** | 加载 11 篇 framework spec → 问答式帮助 developer 产出产品级 spec（VISION.md 的核心愿景） | P0 |
+| 🔲 **ask-docs** | MCP server 实时查最新 spec API（类似 CrewAI 的 ask-docs skill） | P2 |
+| 🔲 **crewai-adaptor** | 让我们的 workflow 能作为 CrewAI Flow/Crew 的一步运行，互相调用 | P1 |
+| 🔲 **history-labeler** | 基于 history turns，正确处理的标记为 positive example，错误的标记为 negative，生成训练/测试数据集。可用现成框架：**Argilla**（数据标注平台）、**Label Studio** | P1 |
+| 🔲 **multi-llm-runner** | 跑测试集同时对比多个 LLM（如 `deepseek-v4 / gpt-4o / claude-sonnet`），输出侧对比准确率；同时测试 client-side LLM 能否正确理解我们的 response。可用现成框架：**promptfoo**（多 LLM 对比测试）、**DeepEval**（指标化评估）、**RAGAS**（RAG 场景评估） | P1 |
 
 ---
 
-### 3. test-client-create
+## Spec Documents — Done
 
-**Status:** 🔲 TODO
-
-**What:** Creates a simulated test client that plays the role of "the user." The client receives our agent's response, understands the conversation state, and generates the next user message — measuring end-to-end transaction completion rate.
-
-**Process:**
-1. Load the workflow definition (domain model + YAML)
-2. Create a test client LLM with a specific persona:
-   ```
-   You are a test user. Your goal is to complete the "{goal}" workflow.
-   You will receive the agent's response and must respond naturally.
-   Follow the conversation to completion. Do NOT cooperate artificially —
-   act like a real user: sometimes change your mind, ask questions, provide
-   partial info.
-   ```
-3. Run N parallel conversation sessions:
-   ```
-   Session 1: User wants a home insurance quote → agent responds → user replies → ... → complete or abandon
-   Session 2: User wants to file a claim → ...
-   ...
-   Session N: ...
-   ```
-4. Measure:
-   - **Transaction completion rate**: % of sessions that reached a terminal state
-   - **Average turns to completion**
-   - **Drop-off point**: which step users abandon at
-   - **Intent switch frequency**: how often users change their mind mid-flow
-   - **Clarification rate**: how often the agent had to re-ask
-5. Output report + conversation transcripts
-
-**When to run:** Before each production deployment, or as part of CI.
-
----
-
-## Spec Documents (Done)
-
-- [x] HLD (v0.7.0)
-- [x] Intent Classification (v0.3.0)
-- [x] State Machine Design (v0.6.0)
-- [x] Extraction Layer (v0.4.0)
-- [x] Domain Model (v0.3.0)
-- [x] Routing & Execution (v0.3.0)
-- [x] Response Generation (v0.4.0)
-- [x] LLM Gateway (v0.1.0)
-- [x] Tool Ecosystem (v0.3.0)
-- [x] Environment Config (v0.3.0)
-- [x] Auth & Token Verification (v0.2.0)
-
-## Skills (Done)
-
-- [x] issue-create
-- [x] implement-interview
-- [x] evals-create
-- [x] ai-cowork-install
-
-## Skills (Planned)
-
-- [ ] intent-analysis
-- [ ] tdd
-- [ ] test-client-create
+| # | Spec | Version |
+|---|------|---------|
+| 1 | [HLD](docs/specs/2026-06-16-deterministic-workflow-framework-design.md) | v0.7.0 |
+| 2 | [Intent Classification](docs/specs/2026-06-16-intent-classification-design.md) | v0.3.0 |
+| 3 | [State Machine](docs/specs/2026-06-16-state-machine-design.md) | v0.6.0 |
+| 4 | [Extraction Layer](docs/specs/2026-06-17-extraction-layer-design.md) | v0.4.0 |
+| 5 | [Domain Model](docs/specs/2026-06-17-domain-model-design.md) | v0.3.0 |
+| 6 | [Routing & Execution](docs/specs/2026-06-17-routing-execution-layer-design.md) | v0.3.0 |
+| 7 | [Response Generation](docs/specs/2026-06-17-response-generation-layer-design.md) | v0.4.0 |
+| 8 | [LLM Gateway](docs/specs/2026-06-17-llm-gateway.md) | v0.1.0 |
+| 9 | [Tool Ecosystem](docs/specs/2026-06-17-tool-ecosystem.md) | v0.3.0 |
+| 10 | [Environment Config](docs/specs/2026-06-17-environment-config.md) | v0.3.0 |
+| 11 | [Auth & Token Verification](docs/specs/2026-06-17-auth-token-verification.md) | v0.2.0 |
 
 ---
 
 ## Future Work
 
-- [ ] **CrewAI Compatibility** — Make our deterministic workflow runnable as a CrewAI Flow or Crew step. Our framework produces guaranteed-correct, auditable sub-workflows; CrewAI's agent ecosystem handles open-ended collaboration. The two should compose:
-  - Export our domain model + workflow YAML → CrewAI-compatible config
-  - Register our Extraction/Validate/Transform pipeline as a CrewAI tool
-  - Allow a CrewAI Flow to invoke our deterministic sub-workflow as a step
-  - Allow our workflow to call a CrewAI Crew for open-ended tasks (e.g., research before extraction)
-- [ ] RoleResolver implementation (auth spec §5.1 interface placeholder)
+- [ ] **CrewAI Compatibility** — Export domain model → CrewAI config. Register pipeline as CrewAI tool. Mutual invocation between our deterministic sub-workflow and CrewAI Crew.
+- [ ] RoleResolver implementation (Auth spec §5.1 interface placeholder)
 - [ ] Python reference implementation
-- [ ] Code-gen skill (downstream from implement-interview)
-- [ ] MCP server for real-time spec queries (like CrewAI's ask-docs)
 - [ ] LangFlow custom components for framework nodes
+- [ ] `agentState` reducer conflict detection for async sub-workflow + parent concurrent writes
+- [ ] Token refresh support for long-running conversations
