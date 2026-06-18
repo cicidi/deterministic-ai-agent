@@ -1,5 +1,5 @@
 created: '2026-06-15'
-updated: '2026-06-16'
+updated: '2026-06-17'
 name: chat-experience-deterministic-work-flow
 status: active
 description: >
@@ -34,6 +34,16 @@ outcome:
         parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
         title: Extraction Layer Specification
         description: Intent classification, entity extraction (slot filling), two-phase dynamic schema, state-aware NLU prompting, deterministic fallback pipeline
+      - file: docs/superpowers/specs/2026-06-16-extraction-layer-design.md
+        parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Extraction Layer Specification
+        description: Extract/Validate/Transform pipeline, per-interface implementation options (LLM, deterministic, hybrid)
+        status: done
+      - file: docs/superpowers/specs/2026-06-16-domain-model-design.md
+        parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
+        title: Domain Model Specification
+        description: Single source of truth — Entity, State, Transition schemas; cross-workflow reuse; framework consumption
+        status: done
       - file: docs/superpowers/specs/2026-06-16-routing-execution-layer-design.md
         parent: docs/superpowers/specs/2026-06-16-deterministic-workflow-framework-design.md
         title: Routing & Execution Layer Specification
@@ -91,6 +101,18 @@ decisions:
   - date: '2026-06-16'
     what: Output format — spec-first with Python reference implementation
     why: Spec defines language-agnostic interfaces; Python impl proves feasibility; enables future TS/Go ports
+    who: cicidi
+  - date: '2026-06-17'
+    what: Extraction Layer — Extract/Validate/Transform three-interface pipeline with 3+ implementation options per interface
+    why: Separate extraction from validation/transformation; each interface pluggable; supports LLM, deterministic, and hybrid strategies
+    who: cicidi
+  - date: '2026-06-17'
+    what: Domain Model — Domain Model as single source of truth (Entity + State + Transition schemas), separate from workflow runtime config
+    why: Reusable across workflows; clear WHAT vs HOW separation; enables downstream skill-driven spec generation
+    who: cicidi
+  - date: '2026-06-17'
+    what: Downstream skill vision — Spec documents serve as interview templates for a spec generator skill
+    why: Developer describes product → Skill loads specs → interviews → product-specific spec ready for impl planning
     who: cicidi
 
 links:

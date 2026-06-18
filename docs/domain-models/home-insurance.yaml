@@ -1,0 +1,64 @@
+domain: home_insurance
+version: 1.0.0
+description: "Home insurance quote, claim, and policy management"
+
+entities:
+  property_info:
+    description: "Property information for home insurance"
+    fields:
+      property_type:
+        type: enum
+        values: [apartment, house, villa]
+        required: true
+        description: "Type of property being insured"
+        examples: ["I live in a house", "3-bedroom apartment", "my villa"]
+        deterministic_fallback:
+          keywords: [apartment, house, villa, condo, flat]
+        transform:
+          - type: normalize
+            config: { op: lowercase }
+          - type: lookup
+            config:
+              mapping:
+                condo: apartment
+                flat: apartment
+                "single family": house
+      address:
+        type: string
+        required: true
+        description: "Full address including street, city, province, postal code"
+        min_length: 5
+      postal_code:
+        type: string
+        required: true
+        description: "6-digit postal code"
+        pattern: "^[0-9]{6}$"
+        deterministic_fallback:
+          regex: "\\b[0-9]{6}\\b"
+          priority: regex_wins
+      building_age:
+        type: int
+        required: true
+        description: "Age of the building in years"
+        range: { min: 0, max: 200 }
+        examples: ["built in 2010", "15 years old", "brand new"]
+        transform:
+          - type: cast
+            config: { to: int }
+      floor_area:
+        type: float
+        required: false
+        description: "Floor area in square meters"
+        range: { min: 1, max: 100000 }
+        transform:
+          - type: cast
+            config: { to: float }
+
+states:
+  collect_property_info:
+    description: "Collect property details from the user"
+    entity: property_info
+    state_hint: >
+      The user is providing property information for a home insurance quote.
+      Address may include street, city, province, postal code.
+      Building age is in years. Brand new or newly built means age 0.
