@@ -14,6 +14,7 @@
 | 2026-06-17 | 0.2.0 | Refactor to interface-first: each interface with 2+ implementation options |
 | 2026-06-17 | 0.3.0 | Replace Python code blocks with YAML schemas; add errorNode cross-reference in Sections 2.2 & 2.3; add LLM JSON guardrail note in Section 3.2; add agentState.phase to StateContext in Section 3.3 |
 | 2026-06-17 | 0.4.0 | Section 2.3: add explicit LLM +1 extra retry rule for extract/transform nodes; fix Chinese text on line 35; Section 4.2 Option B: replace Python expressions with declarative predicate descriptions |
+| 2026-06-18 | 0.5.0 | Extract output contract: multi-intent payloads with ExtractionResult + ExtractedIntentPayload subclasses; payload guardrail validation (fieldName existence + non-empty); LLM audit record schema; intent combination validation cross-reference |
 
 ---
 
@@ -142,15 +143,22 @@ extraction_factory:
 Input:
   user_input:           string              // raw user utterance
   conversation_context: ContextWindow        // last N messages
+  intent_payloads:      IntentPayload[]       // from intent classification (Section 4 of intent spec)
   extraction_rules:     ExtractionRuleSchema[] // what fields to look for
   state_context:        StateContext          // FSM state name + hint
 
 Output:
-  entities:   Map<string, string>  // field_name → raw extracted value
-  source:     string               // which strategy produced the result
-  confidence: float                // 0.0 - 1.0
-  reasoning?: string               // extraction reasoning (audit trail)
+  result: ExtractionResult  // msg_id + typed payloads per intent
 ```
+
+```
+ExtractionResult {
+  msg_id:   string                      // unique per message (auto-generated on receipt)
+  payloads: ExtractedIntentPayload[]    // one per resolved intent; may be empty for skip-intents
+}
+```
+
+The Extract node receives the `IntentPayload[]` from the classifier and produces typed `ExtractedIntentPayload` subclasses. Each intent maps to its corresponding payload class via `INTENT_PAYLOAD_MAP` (see Section 3.7).
 
 ### 3.2 Implementation Options
 
@@ -237,6 +245,144 @@ Options B and C use state context to scope the fallback rules. Option A injects 
 | Maintenance | Prompt tuning | Regex maintenance | Both |
 | Auditability | Partial (LLM reasoning) | Full | Partial |
 | Deployment complexity | Low (LLM SDK) | Minimal (stdlib) | Medium |
+
+### 3.5 ExtractedIntentPayload Schema
+
+Every extract call produces an `ExtractionResult` containing typed `ExtractedIntentPayload` objects. Each intent maps to a subclass.
+
+**Base class (Python dataclass):**
+
+```python
+from dataclasses import dataclass, field
+from typing import Any
+from uuid import uuid4
+
+@dataclass
+class ExtractedIntentPayload:
+    msg_id: str = field(default_factory=lambda: uuid4().hex)
+    intent: str = ""
+    confidence: float = 0.0
+```
+
+**Payload subclasses:**
+
+```python
+@dataclass
+class ConfirmIntentPayload(ExtractedIntentPayload):
+    fields: dict[str, bool] = field(default_factory=dict)
+
+@dataclass
+class DeclineIntentPayload(ExtractedIntentPayload):
+    fields: dict[str, bool] = field(default_factory=dict)
+
+@dataclass
+class ProvideInformationIntentPayload(ExtractedIntentPayload):
+    field_values: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class GetQuoteIntentPayload(ExtractedIntentPayload):
+    field_values: dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class FileClaimIntentPayload(ExtractedIntentPayload):
+    field_values: dict[str, Any] = field(default_factory=dict)
+```
+
+**ExtractionResult wrapper:**
+
+```python
+@dataclass
+class ExtractionResult:
+    msg_id: str
+    payloads: list[ExtractedIntentPayload]
+```
+
+| Payload Class | Intent | Data Shape |
+|--------------|--------|------------|
+| `ConfirmIntentPayload` | `confirm` | `fields: dict[str, bool]` |
+| `DeclineIntentPayload` | `decline` | `fields: dict[str, bool]` |
+| `ProvideInformationIntentPayload` | `provide_information` | `field_values: dict[str, Any]` |
+| `GetQuoteIntentPayload` | `get_quote` | `field_values: dict[str, Any]` |
+| `FileClaimIntentPayload` | `file_claim` | `field_values: dict[str, Any]` |
+
+Intents `ask_question` and `unrecognized_intent` skip extraction entirely and route directly to their respective Layer 3 nodes.
+
+### 3.6 Payload Guardrail Validation
+
+After the Extract node produces payloads, a guardrail validates each `field_values` or `fields` entry before handing off to the Validate node:
+
+1. **Field name existence check** — every key must map to an actual field in the `AgentState` dataclass. This is analogous to Jackson `ObjectMapper` validating JSON keys against a POJO. The validation uses a whitelist derived from `AgentState.__dataclass_fields__`:
+
+```python
+VALID_AGENT_FIELDS: set[str] = {
+    "policy_type", "property_type", "address", "postal_code",
+    "building_age", "floor_area", "coverage_amount", "phone",
+    "claim_type", "claim_description", ...
+}
+
+def validate_payload_fields(payload: ExtractedIntentPayload):
+    data = getattr(payload, "fields", None) or getattr(payload, "field_values", {})
+    for field_name, value in data.items():
+        if field_name not in VALID_AGENT_FIELDS:
+            raise GuardrailError(f"Unknown field '{field_name}' — not found in AgentState")
+        if value is None or value == "":
+            raise GuardrailError(f"Empty value for field '{field_name}'")
+```
+
+2. **Non-empty value check** — no field value may be `None`, `""`, or for boolean payloads, `False` is also treated as empty.
+
+### 3.7 Intent → Payload Factory
+
+The framework uses a dispatch map to instantiate the correct payload class for each intent:
+
+```python
+INTENT_PAYLOAD_MAP = {
+    "confirm":              ConfirmIntentPayload,
+    "decline":              DeclineIntentPayload,
+    "provide_information":  ProvideInformationIntentPayload,
+    "get_quote":            GetQuoteIntentPayload,
+    "file_claim":           FileClaimIntentPayload,
+}
+
+def build_extraction_result(msg_id: str, intent_payloads: list) -> ExtractionResult:
+    payloads = []
+    for ip in intent_payloads:
+        cls = INTENT_PAYLOAD_MAP.get(ip.intent)
+        if cls is None:
+            continue  # skip intents with no extraction (ask_question, unrecognized)
+        payload = cls(msg_id=msg_id, intent=ip.intent, confidence=ip.confidence)
+        payloads.append(payload)
+    return ExtractionResult(msg_id=msg_id, payloads=payloads)
+```
+
+The LLM prompt must guide extraction so that:
+1. Each intent in the input produces one `ExtractedIntentPayload`
+2. Data fields belonging to different intents are placed in separate payloads
+3. Multi-intent messages produce multiple payloads in a single `ExtractionResult`
+
+**Multi-intent example:**
+
+> User: "I want to file a claim, my phone is 123-456-7890"
+
+```json
+{
+  "msg_id": "a1b2c3d4",
+  "payloads": [
+    {
+      "intent": "file_claim",
+      "confidence": 0.95,
+      "field_values": {}
+    },
+    {
+      "intent": "provide_information",
+      "confidence": 0.88,
+      "field_values": {"phone": "123-456-7890"}
+    }
+  ]
+}
+```
+
+**Intent combination validation** (cross-reference): Before extraction proceeds, the intent classifier validates that incompatible complex intents are not combined in a single message (see Intent Classification spec Section 4.3).
 
 ---
 
@@ -614,13 +760,19 @@ custom_engine:   my_package.MyEngine                      # user-provided RuleEn
 User Input
    |
    v
-[Intent Classification]  →  intent_label, confidence, source
+[Intent Classification]  →  ClassificationResult { intents: IntentPayload[] }
+   |
+   v
+[Intent Combination Validate]  →  rejects multiple complex intents (see Intent spec 4.3)
    |
    v
 [State Machine]           →  determines which extraction node to activate
    |
    v
-[Extract]                 →  entities_raw
+[Extract]                 →  ExtractionResult { msg_id, payloads: ExtractedIntentPayload[] }
+   |                          (each intent → typed payload via INTENT_PAYLOAD_MAP)
+   v
+[Payload Guardrail]       →  fieldName existence check + non-empty check (Section 3.6)
    |
    v
 [Validate]                →  entities_validated OR field_errors
@@ -634,9 +786,11 @@ Layer 2: DECIDE
 
 ### 7.2 Intent → Extraction Routing
 
-1. **Intent gates the extraction node**: The state machine uses the intent label to select which extraction node to activate. `get_quote` routes to `collect_property_info_extract`; `file_claim` routes to `file_claim_extract`.
+1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `get_quote` routes to `collect_property_info_extract`; `file_claim` routes to `file_claim_extract`.
 
 2. **Intent may skip extraction**: If the intent is `unrecognized_intent` or `ask_question`, extraction skips entirely and routes directly to a clarification or Q&A node.
+
+3. **Multi-intent per message**: A single user message may carry multiple intents (e.g., `file_claim` + `provide_information`). The Extract node produces one `ExtractedIntentPayload` per intent. Simple intents (non-`complex`) may be combined freely; multiple complex intents in one message are rejected by the combination validator before extraction begins.
 
 ---
 
@@ -689,6 +843,72 @@ When a raw value could map to multiple valid options (e.g., "basic" = `coverage_
 | 5 | Should the extracted + validated entities be persisted before Layer 2 consumes them? | Auditability, replay |
 | 6 | LLM provider unavailable mid-extraction — fall back to Option B (deterministic) or queue? | Availability |
 | 7 | Should the `ExtractionFactory` support fallback chains? (e.g., try Option C → if LLM timeout, fall back to Option B) | Resilience |
+
+---
+
+## 11. LLM Audit Record
+
+Every LLM call within the extraction pipeline (and across the framework) produces an audit record. These records serve two purposes: (a) operational traceability — the raw input/output of every LLM interaction is persisted for debugging and compliance; (b) training data — accumulated records form a dataset for fine-tuning or eval improvement.
+
+### 11.1 Audit Record Schema
+
+```python
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+@dataclass
+class LLMAuditRecord:
+    msg_id: str                  # from ExtractionResult.msg_id
+    intent: str                  # which intent triggered this LLM call
+    node: str                    # node name: extract / validate_llm / transform_llm / classify
+    raw_input: str               # raw user message or serialized input payload
+    llm_output: str              # raw JSON string returned by LLM
+    parsed_result: dict          # JSON-parsed structured output
+    timestamp: str               # ISO 8601 UTC
+    model: str                   # e.g., "gpt-4o", "claude-sonnet-4"
+    tokens_used: int             # total tokens consumed
+```
+
+### 11.2 Audit Flow
+
+```
+User Message
+    │
+    ├── msg_id generated (uuid4().hex)
+    │
+    ▼
+[Intent Classification] ──(LLM call)──→ record to llm_audit
+    │
+    ▼
+[Extract] ──(LLM call, per payload)──→ record to llm_audit
+    │
+    ▼
+[Transform llm_correct/llm_complete] ──(LLM call)──→ record to llm_audit
+```
+
+Each LLM interaction is audited independently — one classification call + one extraction call per payload + any transform LLM calls all produce separate audit records under the same `msg_id`.
+
+### 11.3 Storage
+
+Audit records are persisted to the `llm_audit` table (or equivalent collection). The table is append-only and indexed by `msg_id` and `timestamp`.
+
+| Field | Indexed | Purpose |
+|-------|---------|---------|
+| `msg_id` | Yes | Trace all LLM calls for a message |
+| `timestamp` | Yes | Time-range queries |
+| `intent` | Yes | Filter by intent type |
+| `node` | Yes | Filter by pipeline stage |
+| `raw_input` | No (blob) | Debugging, training data |
+| `llm_output` | No (blob) | Debugging, training data |
+
+### 11.4 Training Data Generation
+
+The accumulated audit records serve as a labeled dataset:
+- `raw_input` → user utterance
+- `llm_output` → expected structured output (validated through guardrails)
+- `intent` + `node` → task label
+
+Periodic exports from `llm_audit` can feed into model fine-tuning pipelines or eval suite construction.
 
 ---
 

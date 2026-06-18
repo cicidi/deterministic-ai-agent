@@ -13,6 +13,7 @@
 | 2026-06-16 | 0.1.0 | Initial intent classification spec |
 | 2026-06-16 | 0.2.0 | Extract custom intent examples to examples/; fix section numbering |
 | 2026-06-17 | 0.3.0 | Add implementation options comparison, YAML schema, open questions, errorNode cross-reference, agentState.phase mention |
+| 2026-06-18 | 0.4.0 | IntentDef adds `complex` field; multi-intent detection implemented (single user message → multiple intents); intent combination validation rules; intent→payload mapping table |
 
 ---
 
@@ -26,16 +27,16 @@ It maps a free-form user utterance to a predefined intent label, optionally with
 
 ### 2.1 System Intents (built-in)
 
-| Intent | Description |
-|--------|-------------|
-| `ask_question` | User asks for information or explanation |
-| `provide_information` | User provides data in response to a prompt |
-| `start_conversation` | User initiates a new conversation |
-| `resume_conversation` | User returns to a previous conversation |
-| `finish_conversation` | User wants to end the conversation |
-| `unrecognized_intent` | Cannot determine intent (low confidence fallback) |
-| `confirm` | User agrees or confirms |
-| `decline` | User disagrees, cancels, or rejects |
+| Intent | Description | Complex | Can Combine |
+|--------|-------------|---------|-------------|
+| `ask_question` | User asks for information or explanation | false | yes |
+| `provide_information` | User provides data in response to a prompt | false | yes |
+| `start_conversation` | User initiates a new conversation | false | yes |
+| `resume_conversation` | User returns to a previous conversation | false | yes |
+| `finish_conversation` | User wants to end the conversation | false | yes |
+| `unrecognized_intent` | Cannot determine intent (low confidence fallback) | false | yes |
+| `confirm` | User agrees or confirms | false | yes |
+| `decline` | User disagrees, cancels, or rejects | false | yes |
 
 ### 2.2 Custom Intents (per-workflow)
 
@@ -47,12 +48,14 @@ Each workflow can define additional domain-specific intents. For a complete cata
 # Schema: IntentDef
 #   name:        string      # unique identifier
 #   description: string      # guides LLM classification
+#   complex:     boolean     # true = multi-turn task; cannot combine with other complex intents
 #   keywords:    string[]    # deterministic fallback patterns
 #   examples:    string[]    # few-shot examples for LLM prompt
 
 intents:
   - name: "ask_question"
     description: "User asks for information or explanation"
+    complex: false
     keywords:
       - "what is"
       - "how does"
@@ -65,6 +68,7 @@ intents:
 
   - name: "get_quote"
     description: "User requests a new insurance quote"
+    complex: true
     keywords:
       - "quote"
       - "get a price"
@@ -162,8 +166,10 @@ LLM result + fallback result can disagree. When they disagree and LLM confidence
 
 ## 4. Output Contract
 
+### 4.1 Classification Result (per-intent)
+
 ```
-ClassificationResult {
+IntentPayload {
   intent:     string      // the resolved intent label
   confidence: number      // 0.0 - 1.0
   source:     "llm" | "keyword" | "unrecognized"
@@ -173,27 +179,113 @@ ClassificationResult {
 
 The `source` field indicates which classifier produced the result, enabling downstream nodes to adjust behavior (e.g., "keyword match → proceed immediately; LLM match → consider re-confirming").
 
+### 4.2 Multi-Intent Output
+
+A single user utterance may carry multiple intents ("I want to file a claim, my phone is 123-456-7890"). The classifier returns a list of `IntentPayload` objects:
+
+```
+ClassificationResult {
+  intents: IntentPayload[]  // one or more resolved intents
+}
+```
+
+**Example:**
+
+```json
+{
+  "intents": [
+    {
+      "intent": "file_claim",
+      "confidence": 0.95,
+      "source": "llm"
+    },
+    {
+      "intent": "provide_information",
+      "confidence": 0.88,
+      "source": "llm",
+      "reasoning": "User provided phone number alongside claim intent"
+    }
+  ]
+}
+```
+
+### 4.3 Intent Combination Rules
+
+Each intent carries a `complex` flag. The combination rules prevent incompatible combinations in a single processing round:
+
+| Scenario | Allowed | Behavior |
+|----------|---------|----------|
+| Multiple simple intents | Yes | Process together |
+| 1 complex + N simple intents | Yes | Process together (simple intents ride on the complex workflow) |
+| Multiple complex intents | No (by default) | See conflict resolution below |
+
+**Conflict resolution for multiple complex intents** is configured in the Response node under `on_multi_intent_conflict`:
+
+| Mode | Behavior |
+|------|----------|
+| `error` (default) | Throw `MultiIntentConflictError`; response layer asks user which task to handle first |
+| `sequential` | Process highest-confidence complex intent first; queue remaining for next turn |
+
+**Validation pseudo-code:**
+
+```
+def validate_intent_combination(intents: IntentPayload[], intent_defs: IntentDef[], mode: string):
+    complex = [i for i in intents if intent_defs[i.intent].complex]
+    if len(complex) > 1:
+        if mode == "error":
+            raise MultiIntentConflictError(
+                conflict_intents=[i.intent for i in complex],
+                message="您提到了多个任务，请先选择一个处理。"
+            )
+        # sequential: keep highest-confidence, queue the rest
+```
+
 ---
 
 ## 5. Open Questions
 
 ### 5.1 Multi-Intent Detection
 
-Should the classifier support detecting multiple intents in a single utterance (e.g., "I want to cancel my policy and get a refund")? Currently the framework returns a single intent. Multi-intent would require either a multi-label classifier or a follow-up disambiguation step.
+Multi-intent detection is now implemented. The classifier returns a list of `IntentPayload` objects per user message (see Section 4.2). Intent combination validation (Section 4.3) prevents incompatible complex intents from being processed together.
 
-### 5.2 Confidence Threshold Calibration
+### 5.2 Intent → Extraction Payload Mapping
+
+Each intent is mapped to a typed extraction payload consumed by the Extract node (see [Extraction Layer Spec](./2026-06-17-extraction-layer-design.md)):
+
+| Intent | Payload Class | Payload Data |
+|--------|--------------|--------------|
+| `confirm` | `ConfirmIntentPayload` | `fields: dict[str, bool]` |
+| `decline` | `DeclineIntentPayload` | `fields: dict[str, bool]` |
+| `provide_information` | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
+| `get_quote` | `GetQuoteIntentPayload` | `field_values: dict[str, Any]` |
+| `file_claim` | `FileClaimIntentPayload` | `field_values: dict[str, Any]` |
+| `ask_question` | *(skip extraction)* | routed directly to Q&A node |
+| `unrecognized_intent` | *(skip extraction)* | routed directly to clarification node |
+
+### 5.3 Intent Analysis Prompt Guidelines
+
+When the LLM analyzes a user message, it should:
+
+1. Identify all intents present (may be multiple)
+2. For each intent, extract any associated data fields
+3. Return an `IntentPayload` for EACH detected intent with its own confidence score
+4. Do not merge data from different intents into a single payload
+
+**Example:** "I want to file a claim, my phone is 123-456-7890" produces TWO payloads — one `FileClaimIntentPayload` (no data) + one `ProvideInformationIntentPayload` (phone number).
+
+### 5.4 Confidence Threshold Calibration
 
 The default threshold of `0.7` is a starting point. In practice, optimal thresholds vary by domain, intent complexity, and LLM model choice. How should teams calibrate thresholds? Options include: historical accuracy analysis per intent, A/B testing, or adaptive thresholds based on conversation phase.
 
-### 5.3 Intent Drift Over Long Conversations
+### 5.5 Intent Drift Over Long Conversations
 
 In long-running conversations (e.g., 20+ turns), user intent may shift gradually without an abrupt topic switch. Should the framework detect intent drift via a windowed confidence trend, or rely on the Layer 2 state machine to detect phase mismatches?
 
-### 5.4 Cross-Lingual Intent Classification
+### 5.6 Cross-Lingual Intent Classification
 
 How should the framework handle non-English input? Options include: (a) translate-to-English before classification, (b) include multilingual examples in the prompt, (c) use a multilingual embedding model. Each has different latency, cost, and accuracy trade-offs.
 
-### 5.5 Cold Start: Zero-Shot vs. Few-Shot Prompting
+### 5.7 Cold Start: Zero-Shot vs. Few-Shot Prompting
 
 For custom intents with no training examples provided, should the framework fall back to a zero-shot prompt, or require a minimum number of examples? Zero-shot is more flexible but less accurate for domain-specific intents.
 
