@@ -107,6 +107,8 @@ Every spec document MUST:
 | 21 | 2026-06-17 | 3 environments: dev, e2e, prod | Per-env thresholds, models, retry configs |
 | 22 | 2026-06-18 | Two-stage classify+extract (separate nodes) | Accuracy > latency: scoped schema per extract call prevents cross-intent field confusion; single combined prompt with all schemas causes LLM to misroute fields between intents |
 | 23 | 2026-06-18 | Multi-intent per message + complex flag | Single user message can carry multiple intents; `complex` flag on IntentDef prevents incompatible multi-turn intents from being processed together |
+ | 24 | 2026-06-18 | A2A + SDK as tool types (not just executor-level) | Nodes can call other agents as tools (`type: a2a`) alongside API/MCP/command tools; SDK tools (`type: sdk`) for OpenCode/Claude as tools; multi-turn A2A conversations with turn budget; all tool failures route to errorNode |
+| 25 | 2026-06-18 | Spec deduplication & version alignment | Guard expression syntax delegated to state-machine §3.4 (domain-model now cross-references); HLD ToolMeta.type enum synced with child specs; remaining Groovy code removed from CI/CD spec; PII tool catalog entries trimmed to cross-reference response-generation §8 |
 
 ---
 
@@ -215,7 +217,15 @@ docs/specs/
 ├── 2026-06-17-routing-execution-layer-design.md             ← child of HLD
 ├── 2026-06-17-response-generation-layer-design.md           ← child of HLD
 ├── 2026-06-17-tool-ecosystem.md                             ← child of HLD
-└── 2026-06-17-environment-config.md                         ← child of HLD
+├── 2026-06-17-a2a-protocol.md                               ← child of HLD
+├── 2026-06-17-mcp-api-protocol.md                           ← child of HLD
+├── 2026-06-17-environment-config.md                         ← child of HLD
+├── 2026-06-17-auth-token-verification.md                    ← child of HLD
+├── 2026-06-17-conversation-lifecycle.md                     ← child of HLD
+├── 2026-06-17-observability-monitoring.md                   ← child of HLD
+├── 2026-06-17-cicd-jenkins-pipeline.md                      ← child of HLD
+├── 2026-06-17-rate-limiting.md                              ← child of HLD
+└── 2026-06-17-widget-templates.md                           ← child of HLD
 
 docs/examples/home-insurance/
 ├── README.md

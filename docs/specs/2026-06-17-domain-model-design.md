@@ -13,6 +13,7 @@
 | 2026-06-17 | 0.1.0 | Initial domain model spec: Entity + State + Transition schema |
 | 2026-06-17 | 0.2.0 | Add implementation options (flat vs nested vs code-first); agentState.phase mapping; errorNode as standard transition target |
 | 2026-06-17 | 0.3.0 | Add Section 1.1: Implementation Approaches (Flat YAML vs Nested/Hierarchical vs Code-First) |
+| 2026-06-18 | 0.4.0 | Replace §6 (duplicated guard expression syntax) with cross-reference to authoritative [State Machine Design §3.4](./2026-06-16-state-machine-design.md); guard expression concerns delegated to state machine spec |
 
 ---
 
@@ -500,50 +501,9 @@ The `errorNode` is resolved by the framework (step 6 of the consumption flow) an
 
 ## 6. Guard Expression Syntax
 
-Guards are boolean expressions evaluated against the current entity state. The framework provides a minimal expression language for guards.
+Guards are boolean expressions evaluated against the current entity state. The **authoritative guard expression syntax** — including boolean operators, comparison operators, list membership, null checks, framework-generated meta-variables, and natural language fallback — is defined in [State Machine Design §3.4 Guard Expression Syntax](./2026-06-16-state-machine-design.md).
 
-### 6.1 Syntax
-
-```
-Expr     = Comparison (BoolOp Comparison)*
-BoolOp   = "AND" | "OR"
-Comparison = Operand RelOp Literal | "context_incomplete" | "context_complete"
-RelOp    = "==" | "!=" | ">" | "<" | ">=" | "<="
-Operand  = field_name                      // references entity field
-Literal  = null | number | string | boolean
-```
-
-### 6.2 Built-in Meta-Variables
-
-| Variable | Evaluates to |
-|----------|-------------|
-| `context_incomplete` | `true` if any required field is null/empty |
-| `context_complete` | `true` if all required fields are non-null and non-empty |
-
-### 6.3 Examples
-
-```
-# Simple required check
-"address != null"
-
-# Multiple required fields
-"property_type != null AND address != null AND building_age != null"
-
-# Composite
-"incident_type != null AND estimated_loss > 0"
-
-# Meta-variable
-"context_incomplete"
-
-# Enum check
-"coverage_type == 'building_only' OR coverage_type == 'both'"
-```
-
-### 6.4 Extensibility
-
-The guard expression syntax is intentionally minimal. For complex business rules (e.g., "risk_score < 80 AND coverage_amount > 500000"), the framework delegates to:
-- **Custom guard functions** — registered Python callable referenced by function name
-- **Rule engine guards** — when `validate_strategy` uses a rule engine, guards can be compiled into the engine's native format
+The domain model uses guards in `TransitionDef` entries to determine which state the workflow enters next. The framework evaluates guards at runtime using the state machine's expression evaluator. For complex business rules, guards can delegate to custom guard functions or rule engines (see State Machine Design §3.4).
 
 ---
 

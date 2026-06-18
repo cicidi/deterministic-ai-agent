@@ -10,6 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial A2A protocol spec: message format, discovery, sync/async, MCP comparison |
+| 2026-06-18 | 0.1.1 | Add cross-reference to [Tool Ecosystem §7.5](./2026-06-17-tool-ecosystem.md) for `type: a2a` tool integration (A2A agents as node-level tools with multi-turn conversations); sync with Decision 24 |
 
 ---
 
@@ -52,6 +53,8 @@ This spec defines **A2A as the runtime communication protocol** between agents. 
 - **MCP tool invocation** → Tool Ecosystem spec §7
 - **OAuth / user identity** → Auth Token Verification spec
 - **Response generation** → Response Generation spec
+
+> **New (2026-06-18):** The A2A protocol is also available as a **tool type** (`type: a2a`) — any node can call another agent as one of its `tool_allowlist` tools, with multi-turn conversation support. See [Tool Ecosystem §7.5](./2026-06-17-tool-ecosystem.md) for A2A tool registration, multi-turn A2A conversations, and the A2A-tool-vs-sub-workflow comparison matrix.
 
 ---
 

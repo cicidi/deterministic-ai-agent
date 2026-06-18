@@ -14,6 +14,7 @@
 | 2026-06-17 | 0.2.0 | Replace all Python code blocks with YAML schemas/structured descriptions; merge errorNode config (§8) into retry section (§6); add YAML schemas for AbstractState, code executors, decision rules, phase routing, errorNode, permission enforcement, tool interface, transition enforcement |
 | 2026-06-17 | 0.3.0 | Add §1.2 AgentState Concurrency Model: copy-on-write + reducer merge, conflict scenarios, reducer strategies (last_write_wins/conflict_detect/append/merge), Java ConcurrentHashMap comparison; Section 2.3: remove ≤50 lines constraint from YAML comment; delete Section 8 stub (now consolidated in Section 6); fix missing closing ``` on ASCII flow diagram in Section 6.7 |
 | 2026-06-17 | 0.4.0 | Add §5 A2A protocol cross-reference (sub-workflows as A2A definition language); add A2A Protocol spec to References |
+| 2026-06-18 | 0.5.0 | Extend `Tool.type` enum from `api \| mcp \| command \| llm` to `api \| mcp \| command \| llm \| a2a \| sdk`; add `a2a` tool type for agent-to-agent as a tool; add `sdk` tool type for OpenCode/Claude SDK as a tool |
 
 ---
 
@@ -826,7 +827,7 @@ Every tool (API, MCP server, command, LLM call) has metadata:
 ```yaml
 tools:
   calculate_premium_api:
-    type: api
+    type: api | mcp | command | llm | a2a | sdk
     access_level: read
     description: "Calculate insurance premium based on property + coverage data"
     endpoint: POST /api/v1/premium/calculate
@@ -863,7 +864,7 @@ Every tool conforms to a standard contract. The framework checks permissions bef
 # Tool contract (interface)
 Tool:
   name: string                                        # unique tool identifier
-  type: api | mcp | command | llm
+  type: api | mcp | command | llm | a2a | sdk
   access_level: read | write | sensitive_data_read | dangerous_operation_write
   metadata: ToolMeta                                  # endpoint, timeout, approval (see §7.3)
   # execute: (params: object, context: ExecutionContext) → ToolResult

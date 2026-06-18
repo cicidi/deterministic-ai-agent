@@ -10,6 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial MCP API protocol spec: server interface, tool definitions, provider config, MCP vs REST comparison |
+| 2026-06-18 | 0.1.1 | Add cross-references to [Tool Ecosystem §7.5](./2026-06-17-tool-ecosystem.md) for `type: a2a` tool type and §7.6 for `type: sdk` tool type; sync with Decision 24 |
 
 ---
 

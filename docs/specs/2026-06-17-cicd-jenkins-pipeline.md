@@ -11,6 +11,7 @@
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial CI/CD pipeline spec: Jenkins stages, mock/real LLM eval, environment promotion, rollback |
 | 2026-06-17 | 0.2.0 | Strip all Groovy implementation code; replace with YAML pipeline stage schemas; add declarative deploy descriptions; add Implementation Options comparison (Jenkins, GitHub Actions, GitLab CI) |
+| 2026-06-18 | 0.2.1 | Actually remove remaining Groovy code in §7.3 (was missed in v0.2.0); replace with declarative YAML pipeline description |
 
 ---
 
@@ -842,69 +843,33 @@ rollback:
         - reason
 ```
 
-### 7.3 Rollback Jenkinfile
+### 7.3 Rollback Pipeline (Declarative)
 
-```groovy
-// Jenkinsfile.rollback
-pipeline {
-    agent any
+The rollback pipeline restores a previous deployment and checkpoints to a known-good state:
 
-    parameters {
-        choice(
-            name: 'ENVIRONMENT',
-            choices: ['dev', 'e2e', 'prod'],
-            description: 'Target environment to rollback'
-        )
-        string(
-            name: 'TARGET_BUILD',
-            defaultValue: 'previous',
-            description: 'Build number to rollback to (or "previous" for last known good)'
-        )
-    }
-
-    stages {
-        stage('Verify Rollback') {
-            steps {
-                script {
-                    def buildNum = params.TARGET_BUILD
-                    if (buildNum == 'previous') {
-                        buildNum = sh(
-                            script: 'kubectl get deployment -n prod deterministic-workflow-prod -o jsonpath="{.metadata.annotations.deployment\\.kubernetes\\.io/revision}"',
-                            returnStdout: true
-                        ).trim().toInteger() - 1
-                    }
-                    env.ROLLBACK_BUILD = buildNum
-                }
-            }
-        }
-
-        stage('Deploy Previous Build') {
-            steps {
-                sh """
-                    kubectl set image deployment/deterministic-workflow-${params.ENVIRONMENT} \
-                        workflow="${DOCKER_REGISTRY}/deterministic-workflow:${ROLLBACK_BUILD}" \
-                        --namespace=${params.ENVIRONMENT}
-                """
-            }
-        }
-
-        stage('Restore Checkpoints') {
-            steps {
-                sh """
-                    python scripts/rollback_checkpoint.py \
-                        --label="pre-deploy-${params.TARGET_BUILD}" \
-                        --env=${params.ENVIRONMENT}
-                """
-            }
-        }
-
-        stage('Verify') {
-            steps {
-                sh "python scripts/smoke_test.py --env=${params.ENVIRONMENT}"
-            }
-        }
-    }
-}
+```yaml
+# rollback pipeline — declarative stages
+rollback_pipeline:
+  trigger: manual | auto
+  auto_triggers:
+    - error_rate > 10% for 5 minutes
+    - goal_check_422_rate > 30% for 5 minutes
+    - critical_alert_fired
+  stages:
+    - name: verify_rollback_target
+      action: resolve_previous_build_number
+      input:
+        target_build: "previous" | <build_number>
+    - name: deploy_previous_build
+      action: set_container_image
+      input:
+        build: "{{rollback.build_number}}"
+    - name: restore_checkpoints
+      action: rollback_checkpoint
+      input:
+        label: "pre-deploy-{{rollback.build_number}}"
+    - name: verify
+      action: run_smoke_tests
 ```
 
 ---

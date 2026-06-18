@@ -16,6 +16,7 @@
 | 2026-06-17 | 0.6.0 | Term consistency: errorNode, phase-aware routing; add YAML schema overview; mark resolved open questions |
 | 2026-06-17 | 0.7.0 | Add Context Hydration layer: pre-processing step loads history, state, session, external entities before three-layer execution |
 | 2026-06-17 | 0.8.0 | Update Related Design Documents with all child specs; add Document Tree section; fill missing table cell |
+| 2026-06-18 | 0.9.0 | Update `ToolMeta.type` enum to include `a2a` and `sdk` per Decision 24; sync document tree with latest specs |
 
 ---
 
@@ -173,7 +174,7 @@ Tools are categorized with metadata:
 ```
 ToolMeta {
   name:        string
-  type:        "api" | "mcp" | "command" | "llm"
+  type:        "api" | "mcp" | "command" | "llm" | "a2a" | "sdk"
   access_level: "read" | "write" | "sensitive_data_read" | "dangerous_operation_write"
   execute():   Result        // tool execution method
 }
