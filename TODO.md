@@ -115,10 +115,21 @@ Last updated: 2026-06-17
 - [x] evals-create
 - [x] ai-cowork-install
 
+## Skills (Planned)
+
+- [ ] intent-analysis
+- [ ] tdd
+- [ ] test-client-create
+
 ---
 
 ## Future Work
 
+- [ ] **CrewAI Compatibility** — Make our deterministic workflow runnable as a CrewAI Flow or Crew step. Our framework produces guaranteed-correct, auditable sub-workflows; CrewAI's agent ecosystem handles open-ended collaboration. The two should compose:
+  - Export our domain model + workflow YAML → CrewAI-compatible config
+  - Register our Extraction/Validate/Transform pipeline as a CrewAI tool
+  - Allow a CrewAI Flow to invoke our deterministic sub-workflow as a step
+  - Allow our workflow to call a CrewAI Crew for open-ended tasks (e.g., research before extraction)
 - [ ] RoleResolver implementation (auth spec §5.1 interface placeholder)
 - [ ] Python reference implementation
 - [ ] Code-gen skill (downstream from implement-interview)
