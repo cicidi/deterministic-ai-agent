@@ -1,7 +1,12 @@
 <p align="center">
   <h1 align="center">Deterministic AI Agent</h1>
   <p align="center">
-    <strong>A reference architecture for auditable, deterministic LLM agents in regulated industries.</strong>
+    <strong>如果你认为 AI workflow 不需要 100% 确定性，这个项目不适合你。</strong>
+    <br />
+    If you think AI workflows don't need 100% determinism, this project is not for you.
+  </p>
+  <p align="center">
+    A reference architecture for auditable, deterministic LLM agents in regulated industries.
     <br />
     Built for correctness. Not probabilistic guessing.
   </p>
@@ -33,6 +38,35 @@ LLM agents are **unreliable** where it matters most:
 - Healthcare agents that collect incomplete patient data
 
 Existing agent frameworks (LangChain, CrewAI) treat the LLM as the primary decision engine. In regulated industries, **the LLM must assist — never decide.**
+
+### A Real Example: Mid-Workflow Topic Switch
+
+A user in the middle of a payment workflow says:
+
+> "算了，我想给别人付款"  *(Never mind, I want to pay someone else.)*
+
+**What a probabilistic agent might do on its own:**
+
+| Guess | Risk |
+|-------|------|
+| Transfer the same amount to a different person | Wrong recipient → financial liability |
+| Cancel and create a brand new payment request | Loses context the user might want to keep |
+| Just proceed with the original payment | Ignores the user's explicit intent change |
+
+**What this framework does — 100% deterministic:**
+
+```
+1. CLASSIFY → intent: "correction" or "change_topic" (recognized, not guessed)
+2. EXTRACT  → nothing. Do NOT guess what the user wants.
+3. DECIDE   → State machine: on unlisted intent during active workflow
+              → route to CLARIFICATION node (deterministic rule, not LLM choice)
+4. RESPOND  → "I noticed you want to change something. Can you clarify:
+              • Transfer the same amount to a different person?
+              • Start a brand new payment request?
+              • Or did you mean something else?"
+```
+
+**The LLM saw the intent change. The state machine decided the response. Zero autonomy, zero hallucination, 100% auditable.**
 
 ## The Solution
 
@@ -119,6 +153,7 @@ A user says: *"I want to file a claim for water damage, my phone is 555-0123"*
 | [Routing & Execution](docs/specs/2026-06-17-routing-execution-layer-design.md) | Executors, decision nodes, sub-workflows, retry/error handling, permissions |
 | [Response Generation](docs/specs/2026-06-17-response-generation-layer-design.md) | Goal-driven workflow, LLM/widget modes, PII scrubbing |
 | [LLM Gateway](docs/specs/2026-06-17-llm-gateway.md) | Mandatory JSON output, schema validation, retry logic |
+| [RAG Interface](docs/specs/2026-06-18-rag-interface.md) | DocumentStore, Embedder, Retriever, RAGPipeline — adopt, don't invent |
 | [Tool Ecosystem](docs/specs/2026-06-17-tool-ecosystem.md) | LangFlow, LangGraph CLI, LangSmith, rule engines, MCP |
 | [Environment Config](docs/specs/2026-06-17-environment-config.md) | dev/e2e/prod, env hierarchy, per-env thresholds |
 | [Auth & Token](docs/specs/2026-06-17-auth-token-verification.md) | JWT/OAuth/OIDC, multi-tenant isolation |

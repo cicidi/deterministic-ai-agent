@@ -13,6 +13,8 @@
 | 2026-06-16 | 0.1.0 | Initial intent classification spec |
 | 2026-06-16 | 0.2.0 | Extract custom intent examples to examples/; fix section numbering |
 | 2026-06-17 | 0.3.0 | Add implementation options comparison, YAML schema, open questions, errorNode cross-reference, agentState.phase mention |
+| 2026-06-18 | 0.5.1 | Simplify §2.4: remove Options A/B/C comparison table; keep only LLM + keyword fallback as the single strategy |
+| 2026-06-18 | 0.5.0 | Expand system intents from 8 to 17: remove `resume_conversation` (demoted to system state, not user intent); add `help`, `correction`, `chitchat`, `out_of_scope`, `repeat`, `escalate`, `restart`, `complaint`, `pause`, `ambiguous_request`; add keyword + example YAML definitions for all system intents; expand §5.2 payload mapping to all 17 system intents |
 | 2026-06-18 | 0.4.0 | IntentDef adds `complex` field; multi-intent detection implemented (single user message → multiple intents); intent combination validation rules; intent→payload mapping table |
 
 ---
@@ -27,16 +29,176 @@ It maps a free-form user utterance to a predefined intent label, optionally with
 
 ### 2.1 System Intents (built-in)
 
-| Intent | Description | Complex | Can Combine |
-|--------|-------------|---------|-------------|
-| `ask_question` | User asks for information or explanation | false | yes |
-| `provide_information` | User provides data in response to a prompt | false | yes |
-| `start_conversation` | User initiates a new conversation | false | yes |
-| `resume_conversation` | User returns to a previous conversation | false | yes |
-| `finish_conversation` | User wants to end the conversation | false | yes |
-| `unrecognized_intent` | Cannot determine intent (low confidence fallback) | false | yes |
-| `confirm` | User agrees or confirms | false | yes |
-| `decline` | User disagrees, cancels, or rejects | false | yes |
+All 17 system intents below are available to every workflow. They cover conversation lifecycle, error recovery, task disambiguation, and social interaction — independent of any product domain.
+
+| Category | Intent | Description | Complex |
+|----------|--------|-------------|---------|
+| **Conversation Lifecycle** | `start_conversation` | User initiates a new conversation | false |
+| | `finish_conversation` | User wants to end the conversation | false |
+| | `pause` | User asks the bot to pause or wait ("hold on", "wait a moment") | false |
+| | `restart` | User wants to start the current workflow over from the beginning | false |
+| **Information Exchange** | `ask_question` | User asks for information or explanation | false |
+| | `provide_information` | User provides data in response to a prompt | false |
+| | `repeat` | User asks the bot to repeat the last response | false |
+| **Confirmation** | `confirm` | User agrees or confirms | false |
+| | `decline` | User disagrees, cancels, or rejects | false |
+| **Error & Recovery** | `unrecognized_intent` | Cannot determine intent (low confidence fallback) | false |
+| | `correction` | User corrects a prior statement — theirs or the bot's | false |
+| | `ambiguous_request` | Utterance maps to multiple possible intents; needs disambiguation | false |
+| | `out_of_scope` | Request recognized but system explicitly does not support it | false |
+| **Social & Meta** | `help` | User asks about system capabilities or how to use the bot | false |
+| | `chitchat` | Casual social conversation unrelated to any task | false |
+| | `complaint` | User expresses dissatisfaction or files a complaint | false |
+| | `escalate` | User requests to speak with a human agent | false |
+
+> **All system intents are `complex: false`** — they can be freely combined with each other and with custom intents in a single classification round (see §4.3).
+
+#### System Intent Keywords & Examples
+
+The framework's keyword fallback (see §3.4) relies on these definitions. Each system intent includes a `keywords` list for deterministic matching and `examples` for LLM few-shot prompting.
+
+```yaml
+# SYSTEM INTENTS — built into the framework
+# All complex: false; all can combine with simple intents
+
+system_intents:
+  # ── Conversation Lifecycle ──
+  - name: start_conversation
+    description: User initiates a new conversation
+    keywords: [hello, hi, hey, good morning, good afternoon, greetings, what's up]
+    examples:
+      - "Hello, I need help"
+      - "Hi there"
+      - "Good morning"
+
+  - name: finish_conversation
+    description: User wants to end the conversation
+    keywords: [bye, goodbye, that's all, done, no more questions, I'm finished, see you, thanks bye]
+    examples:
+      - "That's all I needed, thanks"
+      - "Goodbye"
+      - "I'm done, thank you"
+
+  - name: pause
+    description: User asks the bot to pause or wait
+    keywords: [wait, hold on, one moment, give me a second, pause, hang on, let me think, not ready]
+    examples:
+      - "Wait, let me check something"
+      - "Hold on a moment"
+      - "Give me a second"
+
+  - name: restart
+    description: User wants to start the current workflow over from the beginning
+    keywords: [start over, begin again, restart, from the beginning, reset, clear everything, new session, let's redo]
+    examples:
+      - "Let's start over"
+      - "Can we begin again?"
+      - "Reset everything, I made a mistake"
+
+  # ── Information Exchange ──
+  - name: ask_question
+    description: User asks for information or explanation
+    keywords: [what is, how does, tell me about, explain, why, when did, where is, who is, can you tell]
+    examples:
+      - "What is my deductible?"
+      - "How does the claims process work?"
+      - "Tell me about coverage options"
+
+  - name: provide_information
+    description: User provides data in response to a prompt
+    keywords: [my name is, my phone is, my address is, the number is, it's, here is, this is]
+    examples:
+      - "My name is John"
+      - "The address is 123 Main St"
+      - "It's 555-0123"
+
+  - name: repeat
+    description: User asks the bot to repeat the last response
+    keywords: [repeat, say that again, what did you say, come again, pardon, sorry what, can you repeat, once more]
+    examples:
+      - "Can you repeat that?"
+      - "What did you say?"
+      - "Say that again please"
+
+  # ── Confirmation ──
+  - name: confirm
+    description: User agrees or confirms
+    keywords: [yes, yeah, correct, that's right, exactly, sounds good, okay, sure, go ahead, proceed]
+    examples:
+      - "Yes, that's correct"
+      - "Sounds good, proceed"
+      - "Yeah, go ahead"
+
+  - name: decline
+    description: User disagrees, cancels, or rejects
+    keywords: [no, nope, not, that's wrong, incorrect, cancel, stop, never mind, I don't want, reject]
+    examples:
+      - "No, that's not what I want"
+      - "Cancel that"
+      - "Never mind, forget it"
+
+  # ── Error & Recovery ──
+  - name: unrecognized_intent
+    description: Cannot determine intent (low confidence fallback)
+    keywords: []  # no keywords — produced by classifier when confidence < threshold
+    examples: []  # no examples — this is a fallback output, not a user-expressed intent
+    note: "Framework-internal fallback. Not matched by keywords; produced when all classification fails."
+
+  - name: correction
+    description: User corrects a prior statement — theirs or the bot's
+    keywords: [no, wrong, that's not right, I meant, actually, not that, I said, change that to, correct that, not X]
+    examples:
+      - "No, I meant 456 Oak Street, not 123 Main"
+      - "That's wrong, my phone is 555-9999"
+      - "Actually, I changed my mind — make it $500k coverage"
+
+  - name: ambiguous_request
+    description: Utterance maps to multiple possible intents; needs disambiguation
+    keywords: []  # no keywords — produced by classifier when confidence is split
+    examples: []  # no examples — this is a classifier meta-output
+    note: "Framework-internal meta-intent. Produced when classifier detects multiple equally-plausible intents and needs user disambiguation."
+
+  - name: out_of_scope
+    description: Request recognized but system explicitly does not support it
+    keywords: []  # no keywords — determined by system capability registry, not user phrasing
+    examples: []  # no examples — the user's words vary; classifier cross-references with capability registry
+    note: "Framework-internal meta-intent. Produced when the classifier identifies a valid request pattern that the system's capability registry marks as unsupported."
+
+  # ── Social & Meta ──
+  - name: help
+    description: User asks about system capabilities or how to use the bot
+    keywords: [help, what can you do, how do I use, guide me, assist, support, what are you capable of, commands, options]
+    examples:
+      - "What can you help me with?"
+      - "How do I use this?"
+      - "What are my options?"
+
+  - name: chitchat
+    description: Casual social conversation unrelated to any task
+    keywords: [how are you, how's it going, thank you, thanks, appreciate it, tell me a joke, nice weather, lol, haha, how do you do]
+    examples:
+      - "How are you today?"
+      - "Thank you for helping!"
+      - "Tell me a joke"
+
+  - name: complaint
+    description: User expresses dissatisfaction or files a complaint
+    keywords: [complaint, unhappy, dissatisfied, frustrated, terrible, awful, bad service, not satisfied, want to complain, this is unacceptable]
+    examples:
+      - "I'm very unhappy with this process"
+      - "This is terrible service"
+      - "I want to file a complaint"
+
+  - name: escalate
+    description: User requests to speak with a human agent
+    keywords: [human, speak to someone, real person, talk to a person, representative, agent, customer service, operator, transfer me, connect me to]
+    examples:
+      - "I want to speak to a human"
+      - "Can you transfer me to an agent?"
+      - "Let me talk to a real person"
+```
+
+> **Meta-intents without keywords** (`unrecognized_intent`, `ambiguous_request`, `out_of_scope`) are produced by the classifier, not by keyword matching. They rely entirely on LLM classification and capability registry lookup. See §3 for classification flow.
 
 ### 2.2 Custom Intents (per-workflow)
 
@@ -80,25 +242,20 @@ intents:
       - "Give me a price estimate"
 ```
 
-### 2.4 Implementation Options
+### 2.4 Classification Strategy
 
-The framework supports three classification strategies. Projects select one at configuration time based on their latency, cost, and determinism requirements.
+The framework uses **LLM-first classification with keyword fallback** as a deterministic safety net. This is the only supported strategy — there is no fallback to simpler mechanisms.
 
-| Dimension | Option A: LLM-Only | Option B: Keyword/Regex-Only | Option C: LLM + Keyword Fallback |
-|-----------|-------------------|------------------------------|----------------------------------|
-| **Accuracy** | High (understands nuance) | Low–Medium (literal matches only) | High (LLM primary, keyword safety net) |
-| **Determinism** | Low (non-deterministic by nature) | High (100% predictable) | Medium (keyword guarantees for known patterns) |
-| **Latency** | 200–800ms (API call) | <1ms | 200–800ms (LLM); <1ms on LLM failure |
-| **Cost** | Per-classification API cost | Free | Per-classification API cost (no cost on keyword-only hit) |
-| **Graceful Degradation** | None (LLM failure = unrecognized) | Bare keyword matching only | Falls back to keyword on LLM failure |
-| **Extensibility** | Prompt adjustments only | Add keywords/regex patterns | Add keywords + prompt adjustments |
-| **Best For** | Prototyping, simple domains | High-throughput, narrow-domain bots | Production systems in regulated industries |
+| Dimension | Behavior |
+|-----------|----------|
+| **Primary** | LLM classifies the user utterance with conversation context and intent definitions |
+| **Fallback** | Keyword matching on intent `keywords` list (case-insensitive, confidence=1.0) |
+| **Merge** | LLM result wins if confidence ≥ threshold; otherwise keyword result wins |
+| **Neither** | Returns `unrecognized_intent` → routes to clarification node |
+| **Confidence Threshold** | Configurable, default `0.7` |
+| **Temperature** | 0 (deterministic output) |
 
-**Option A: LLM-Only** — Every classification goes through the LLM. No keyword fallback. Simple but no safety net.
-**Option B: Keyword/Regex-Only** — Pure pattern matching. Fast and deterministic but cannot handle ambiguous or novel utterances.
-**Option C: LLM + Keyword Fallback** (default) — LLM-first with keyword safety net. Recommended for production.
-
-The remainder of this document describes Option C in detail.
+The full classification flow is specified in §3.
 
 ## 3. Classification Strategy: LLM-First + Keyword Fallback
 
@@ -106,7 +263,7 @@ The remainder of this document describes Option C in detail.
 
 ### 3.1 Conversation Context
 
-Intent classification is not a single-message operation. The LLM prompt must include conversation history to resolve ambiguous utterances. For example, "yes" means `confirm` if the agent just asked "should I proceed?" but means `provide_information` if the agent asked "what's your name?".
+Intent classification is not a single-message operation. The LLM prompt must include conversation history to resolve ambiguous utterances. For example, "yes" means `confirm` if the agent just asked "should I proceed?" but means `provide_information` if the agent asked "is your phone number 555-0123?" (confirming extracted data). Without context, a one-word reply like "yes" to "what's your name?" is `unrecognized_intent` — it makes no semantic sense.
 
 The framework includes the **last 3 user messages + last 3 agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
 
@@ -252,15 +409,37 @@ Multi-intent detection is now implemented. The classifier returns a list of `Cla
 
 Each intent is mapped to a typed extraction payload consumed by the Extract node (see [Extraction Layer Spec](./2026-06-17-extraction-layer-design.md)):
 
-| Intent | Payload Class | Payload Data |
-|--------|--------------|--------------|
+#### System Intents
+
+| Intent | Payload Class | Extraction / Routing |
+|--------|--------------|---------------------|
+| `start_conversation` | *(skip extraction)* | route to conversation init node |
+| `finish_conversation` | *(skip extraction)* | route to conversation end node |
+| `pause` | *(skip extraction)* | pause processing, await user signal |
+| `restart` | *(skip extraction)* | reset agentState, return to entry |
+| `ask_question` | *(skip extraction)* | route directly to Q&A node |
+| `provide_information` | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
+| `repeat` | *(skip extraction)* | replay last assistant message |
 | `confirm` | `ConfirmIntentPayload` | `fields: dict[str, bool]` |
 | `decline` | `DeclineIntentPayload` | `fields: dict[str, bool]` |
-| `provide_information` | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
-| `get_quote` | `GetQuoteIntentPayload` | `field_values: dict[str, Any]` |
-| `file_claim` | `FileClaimIntentPayload` | `field_values: dict[str, Any]` |
-| `ask_question` | *(skip extraction)* | routed directly to Q&A node |
-| `unrecognized_intent` | *(skip extraction)* | routed directly to clarification node |
+| `unrecognized_intent` | *(skip extraction)* | route to clarification node |
+| `correction` | `CorrectionIntentPayload` | `corrected_fields: dict[str, Any]` |
+| `ambiguous_request` | `AmbiguousRequestPayload` | `possible_intents: str[]`, requires user disambiguation |
+| `out_of_scope` | *(skip extraction)* | route to out-of-scope response node |
+| `help` | *(skip extraction)* | route to help/capabilities node |
+| `chitchat` | *(skip extraction)* | route to chitchat response node |
+| `complaint` | `ComplaintIntentPayload` | `subject: str, details: str` |
+| `escalate` | `EscalateIntentPayload` | `reason: str, urgency: str` |
+
+#### Custom Intents (per-workflow)
+
+| Intent | Payload Class | Extraction / Routing |
+|--------|--------------|---------------------|
+| `<domain_intent>` | `<DomainIntentPayload>` | `field_values: dict[str, Any]` |
+
+Custom intents follow the same pattern as `provide_information` — entity extraction populates a domain-specific payload consumed by the downstream workflow node. The payload class is derived from the intent name (e.g., `get_quote` → `GetQuoteIntentPayload`). Complex intents may skip extraction on the first turn and defer to multi-turn slot-filling.
+
+> **Example — Home Insurance:** `get_quote` → `GetQuoteIntentPayload` (`field_values`), `file_claim` → `FileClaimIntentPayload` (`field_values`), `check_coverage` → `CheckCoverageIntentPayload` (`field_values`).
 
 ### 5.3 Intent Analysis Prompt Guidelines
 
