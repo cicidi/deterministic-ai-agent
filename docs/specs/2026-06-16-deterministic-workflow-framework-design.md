@@ -15,6 +15,7 @@
 | 2026-06-17 | 0.5.0 | Add framework design principles (conventions, JSON guardrails, permission model) |
 | 2026-06-17 | 0.6.0 | Term consistency: errorNode, phase-aware routing; add YAML schema overview; mark resolved open questions |
 | 2026-06-17 | 0.7.0 | Add Context Hydration layer: pre-processing step loads history, state, session, external entities before three-layer execution |
+| 2026-06-17 | 0.8.0 | Update Related Design Documents with all child specs; add Document Tree section; fill missing table cell |
 
 ---
 
@@ -129,7 +130,7 @@ The framework exposes clean interfaces for developers to implement business logi
 | Audit trail | Every decision, extraction, and transition logged |
 | Deterministic fallback | Regex/keyword fallback for every extractable field |
 | State awareness | Current FSM state injected into every LLM prompt |
-| Phase-aware routing + return stack |
+| Phase-aware routing + return stack | Current FSM phase injected into routing decisions; return stack tracks parent context when sub-workflows complete, enabling seamless resume |
 | Sub-workflow reuse | Shared capabilities defined once, invoked from any state |
 
 All LLM interactions produce structured JSON output with framework-enforced guardrails (schema check, field presence, type coercion). Free-text generation is limited to Layer 3.
@@ -192,6 +193,18 @@ Detailed permission design in [Routing & Execution Layer](./2026-06-17-routing-e
 - **[Extraction Layer Design](./2026-06-17-extraction-layer-design.md)** — Layer 1 entity extraction: Extract/Validate/Transform pipeline with multiple implementation options.
 - **[Domain Model Design](./2026-06-17-domain-model-design.md)** — Single source of truth: Entity + State + Transition schemas, cross-workflow reuse.
 - **[Routing & Execution Layer Design](./2026-06-17-routing-execution-layer-design.md)** — Layer 2 routing and execution: business logic, decision nodes, phase-aware routing, retry budgets, sub-workflow reuse, permission model.
+- **[Response Generation Layer Design](./2026-06-17-response-generation-layer-design.md)** — Layer 3 response generation: message composition, widget rendering, PII scrubbing.
+- **[LLM Gateway](./2026-06-17-llm-gateway.md)** — Gatekeeper for all LLM calls: schema validation, retry, timeout, cost tracking, provider routing.
+- **[Tool Ecosystem](./2026-06-17-tool-ecosystem.md)** — Visual editor (LangFlow), rule engines, MCP servers, PII detection (Presidio), LLM providers, pycasbin permission enforcement.
+- **[Environment Config](./2026-06-17-environment-config.md)** — Multi-environment configuration: dev, e2e, prod settings, secrets management, feature flags.
+- **[Auth & Token Verification](./2026-06-17-auth-token-verification.md)** — Authentication and token verification: OAuth scopes, session tokens, role-based access.
+- **[MCP API Protocol](./2026-06-17-mcp-api-protocol.md)** — MCP API protocol specification: tool discovery, invocation patterns, server lifecycle.
+- **[A2A Protocol](./2026-06-17-a2a-protocol.md)** — Agent-to-Agent protocol: inter-agent communication, message routing, agent coordination.
+- **[Conversation Lifecycle](./2026-06-17-conversation-lifecycle.md)** — Conversation lifecycle management: creation, pause/resume, checkpoint, archival, termination.
+- **[Observability & Monitoring](./2026-06-17-observability-monitoring.md)** — Metrics, tracing, alerting, Grafana dashboards, LangSmith integration.
+- **[CI/CD Pipeline](./2026-06-17-cicd-jenkins-pipeline.md)** — Automated validation, evaluation, build, and deployment pipeline with gated environment promotion.
+- **[Rate Limiting](./2026-06-17-rate-limiting.md)** — Rate limiting strategy: per-user, per-workflow, per-LLM-provider throttling.
+- **[Widget Templates](./2026-06-17-widget-templates.md)** — Widget template system: structured UI components for Layer 3 responses.
 - **[Home Insurance Examples](../examples/home-insurance/)** — Complete workflow definition (`workflow.yaml`), intent catalog, end-to-end scenarios, and audit log sample.
 
 ## 6. Downstream: Skill-Assisted Spec Generation
@@ -219,6 +232,38 @@ The framework specs are designed with clear decision boundaries: **"framework de
 2. Rasa CALM — "The LLM understands; the code enforces." *rasa.com*
 3. zelkim/langgraph-insurance-chatbot — LangGraph.js insurance quote chatbot. *github.com/zelkim/langgraph-insurance-chatbot*
 4. Prodigal Payment Collection Agent — Python FSM payment agent. *github.com/AvnishChitrigi/Prodigal-Assignment-Production-Ready-Payment-Collection-AI-Agent*
+
+---
+
+## 8. Document Tree
+
+```
+docs/
+├── specs/
+│   ├── 2026-06-16-deterministic-workflow-framework-design.md  ← This document (HLD)
+│   ├── 2026-06-16-state-machine-design.md
+│   ├── 2026-06-16-intent-classification-design.md
+│   ├── 2026-06-17-extraction-layer-design.md
+│   ├── 2026-06-17-domain-model-design.md
+│   ├── 2026-06-17-routing-execution-layer-design.md
+│   ├── 2026-06-17-response-generation-layer-design.md
+│   ├── 2026-06-17-llm-gateway.md
+│   ├── 2026-06-17-tool-ecosystem.md
+│   ├── 2026-06-17-environment-config.md
+│   ├── 2026-06-17-auth-token-verification.md
+│   ├── 2026-06-17-mcp-api-protocol.md
+│   ├── 2026-06-17-a2a-protocol.md
+│   ├── 2026-06-17-conversation-lifecycle.md
+│   ├── 2026-06-17-observability-monitoring.md
+│   ├── 2026-06-17-cicd-jenkins-pipeline.md
+│   ├── 2026-06-17-rate-limiting.md
+│   ├── 2026-06-17-widget-templates.md
+│   └── zh/
+├── examples/
+│   └── home-insurance/
+└── skills/
+    └── (skill definitions for downstream spec generation)
+```
 
 ---
 

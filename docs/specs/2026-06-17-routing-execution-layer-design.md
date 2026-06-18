@@ -12,8 +12,8 @@
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial routing & execution spec: executor, decision nodes, phase-aware routing + return stack, sub-workflow, retry, permission, tool system |
 | 2026-06-17 | 0.2.0 | Replace all Python code blocks with YAML schemas/structured descriptions; merge errorNode config (§8) into retry section (§6); add YAML schemas for AbstractState, code executors, decision rules, phase routing, errorNode, permission enforcement, tool interface, transition enforcement |
-| 2026-06-17 | 0.3.0 | Add §1.2 AgentState Concurrency Model: copy-on-write + reducer merge, conflict scenarios, reducer strategies (last_write_wins/conflict_detect/append/merge), Java ConcurrentHashMap comparison |
-| 2026-06-17 | 0.3.0 | Section 2.3: remove ≤50 lines constraint from YAML comment; delete Section 8 stub (now consolidated in Section 6); fix missing closing ``` on ASCII flow diagram in Section 6.7 |
+| 2026-06-17 | 0.3.0 | Add §1.2 AgentState Concurrency Model: copy-on-write + reducer merge, conflict scenarios, reducer strategies (last_write_wins/conflict_detect/append/merge), Java ConcurrentHashMap comparison; Section 2.3: remove ≤50 lines constraint from YAML comment; delete Section 8 stub (now consolidated in Section 6); fix missing closing ``` on ASCII flow diagram in Section 6.7 |
+| 2026-06-17 | 0.4.0 | Add §5 A2A protocol cross-reference (sub-workflows as A2A definition language); add A2A Protocol spec to References |
 
 ---
 
@@ -471,6 +471,8 @@ phases:
 ## 5. Sub-Workflow
 
 ### 5.1 Concept
+
+**Sub-workflows are the definition language for A2A (Agent-to-Agent) communication.** They define *what* agents communicate and *how* they coordinate — the inputs, outputs, permissions, and execution contracts between agents. See [A2A Protocol spec](./2026-06-17-a2a-protocol.md) for the runtime protocol that sub-workflows execute over (agent discovery, capability negotiation, task lifecycle, message formats).
 
 Sub-workflows are **complete, standalone workflows** with the same structure as the super workflow — their own domain model (entities, states, transitions), permission model, retry budgets, and routing. Shared capabilities (RAG FAQ, identity verification, payment processing) are defined once and invoked from any state in any parent workflow.
 
@@ -951,5 +953,6 @@ transition_enforcement:
 - [State Machine Design](./2026-06-16-state-machine-design.md) — transition mechanics, state metadata, guard expressions
 - [Domain Model Design](./2026-06-17-domain-model-design.md) — entity/state/transition schema
 - [Extraction Layer Design](./2026-06-17-extraction-layer-design.md) — Extract/Validate/Transform interfaces
+- [A2A Protocol](./2026-06-17-a2a-protocol.md) — Agent-to-Agent runtime protocol (discovery, negotiation, task lifecycle, message formats)
 - zelkim/langgraph-insurance-chatbot — phase-aware routing pattern, sub-workflow anti-pattern
 - Prodigal Payment Collection Agent — per-phase retry budgets, tool execution pattern

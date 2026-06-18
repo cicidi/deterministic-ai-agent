@@ -10,6 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial observability spec: metrics, Grafana dashboards, alert rules, LangSmith/Prometheus/Grafana integration |
+| 2026-06-17 | 0.2.0 | §3.4: replace Grafana dashboard JSON with YAML schema; §4.2: replace executable alert rules YAML with schema descriptions; add §7 Implementation Options (Grafana+Prometheus, Datadog, OpenTelemetry) with comparison matrix |
 
 ---
 
@@ -260,104 +261,65 @@ observability:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.4 Grafana Dashboard JSON (Provisioning)
+### 3.4 Grafana Dashboard Schema (Provisioning)
 
-```json
-{
-  "dashboard": {
-    "uid": "deterministic-workflow-overview",
-    "title": "Deterministic Workflow — Overview",
-    "tags": ["deterministic-framework", "production"],
-    "timezone": "browser",
-    "refresh": "30s",
-    "panels": [
-      {
-        "id": 1,
-        "title": "Active Conversations",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "conversations_active{environment=\"${ENV}\"}",
-            "legendFormat": "Active"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "thresholds": {
-              "steps": [
-                { "value": null, "color": "green" },
-                { "value": 100, "color": "yellow" },
-                { "value": 500, "color": "red" }
-              ]
-            }
-          }
-        },
-        "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 }
-      },
-      {
-        "id": 2,
-        "title": "Error Rate",
-        "type": "gauge",
-        "targets": [
-          {
-            "expr": "error_rate{environment=\"${ENV}\"}",
-            "legendFormat": "Error Rate"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "thresholds": {
-              "steps": [
-                { "value": null, "color": "green" },
-                { "value": 5, "color": "yellow" },
-                { "value": 10, "color": "red" }
-              ]
-            },
-            "unit": "percent"
-          }
-        },
-        "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 }
-      },
-      {
-        "id": 3,
-        "title": "LLM Latency (p95)",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.95, rate(llm_call_latency_seconds_bucket{environment=\"${ENV}\"}[5m]))",
-            "legendFormat": "p95"
-          }
-        ],
-        "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 }
-      },
-      {
-        "id": 4,
-        "title": "Goal Check 422 Rate",
-        "type": "gauge",
-        "targets": [
-          {
-            "expr": "goal_check_422_rate{environment=\"${ENV}\"}",
-            "legendFormat": "422 Rate"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "thresholds": {
-              "steps": [
-                { "value": null, "color": "green" },
-                { "value": 5, "color": "yellow" },
-                { "value": 10, "color": "red" }
-              ]
-            },
-            "unit": "percent"
-          }
-        },
-        "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 }
-      }
-    ]
-  }
-}
+Dashboards are provisioned declaratively. The YAML schema below defines the structure; actual Grafana JSON is generated from this schema at deploy time.
+
+```yaml
+# Grafana dashboard schema — generated into JSON at provision time
+dashboard_schema:
+  uid: string                          # unique dashboard identifier
+  title: string                        # display title
+  tags: string[]                       # organization tags
+  refresh_interval: string             # e.g. "30s", "1m"
+  time_range:
+    from: string                       # default: "now-15m"
+  
+  rows:
+    - name: string                     # row label (e.g. "Overview", "LLM Health")
+      panels:
+        - title: string                # panel title
+          type: stat | gauge | graph | heatmap | table
+          width: 1..24                 # grid columns (Grafana 24-col grid)
+          height: 1..20                # grid rows
+          x: 0..23
+          y: 0..N
+          
+          targets:
+            - query: string            # PromQL expression or SQL query
+              legend: string           # legend label
+          
+          thresholds:                  # for stat/gauge panels
+            - value: number | null
+              color: green | yellow | orange | red
+          
+          unit: string                 # e.g. "percent", "seconds", "short"
+          
+          overrides:                   # per-series overrides (optional)
+            - alias: string
+              color: string
+              fill: number             # 0-10
+
+  variables:                           # dashboard template variables (optional)
+    - name: string                     # e.g. "environment"
+      type: custom | query | datasource
+      default: string
+      options: string[]
+
+  datasources:
+    - name: string                     # e.g. "Prometheus", "PostgreSQL-Audit"
+      type: prometheus | postgres | elasticsearch
+      uid: string                      # datasource UID in Grafana config
 ```
+
+**Pre-built dashboard templates:**
+
+| Dashboard | Panels | Data Source | Refresh |
+|-----------|--------|-------------|---------|
+| Overview | Active convos (stat), created/completed (stat), completion rate (gauge), convos over time (graph), messages processed (stat), error rate (gauge) | Prometheus | 30s |
+| LLM Health | Latency heatmap (histogram), p50/p95/p99 (stat), schema violations (stat), retries (stat), token usage stacked bar (graph) | Prometheus | 30s |
+| Business Metrics | Goal check 422 rate (gauge), intent gap rate (gauge), 422 over time (graph), intent gaps over time (graph), dangerous op approvals (stat) | Prometheus | 30s |
+| Audit Trail | State distribution (pie), state transition timeline (table), conversation detail drill-down (table) | PostgreSQL | 1m |
 
 ---
 
@@ -374,82 +336,48 @@ observability:
 | **No Active Conversations** | `conversations_active == 0` for 10 min | Info | Slack #oncall | Verify deployment health, check MCP server status |
 | **Completion Rate Drop** | `completion_rate < 50%` for 15 min | Warning | Slack #product | Review goal_check behavior, check for breaking workflow changes |
 
-### 4.2 Prometheus Alert Rules (YAML)
+### 4.2 Alert Rule Schema
+
+Alert rules are defined declaratively. The schema below describes the structure; actual Prometheus rule YAML or provider-specific configuration is generated at deploy time.
 
 ```yaml
-# prometheus/alerts.yaml
-groups:
-  - name: deterministic_workflow_alerts
-    rules:
-      - alert: HighErrorRate
-        expr: |
-          rate(errorNode_invocations_total[5m]) / rate(messages_processed_total[5m]) * 100 > 5
-        for: 5m
-        labels:
-          severity: critical
-          service: deterministic-workflow-framework
-        annotations:
-          summary: "Error rate exceeds 5%"
-          description: "Error rate is {{ $value }}% in {{ $labels.environment }}. Check errorNode logs and LLM provider status."
-          runbook_url: "https://wiki.example.com/runbooks/high-error-rate"
-
-      - alert: LLMLatencySpike
-        expr: |
-          histogram_quantile(0.95, rate(llm_call_latency_seconds_bucket[5m])) > 5
-        for: 5m
-        labels:
-          severity: warning
-          service: deterministic-workflow-framework
-        annotations:
-          summary: "LLM p95 latency exceeds 5 seconds"
-          description: "LLM p95 latency is {{ $value }}s in {{ $labels.environment }} for provider {{ $labels.provider }}."
-          runbook_url: "https://wiki.example.com/runbooks/llm-latency-spike"
-
-      - alert: HighGoalCheck422Rate
-        expr: |
-          goal_check_422_rate > 10
-        for: 5m
-        labels:
-          severity: warning
-          service: deterministic-workflow-framework
-        annotations:
-          summary: "Goal check 422 rate exceeds 10%"
-          description: "Goal check 422 rate is {{ $value }}% — goal extraction may be failing for user requests."
-          runbook_url: "https://wiki.example.com/runbooks/high-422-rate"
-
-      - alert: SchemaViolationSpike
-        expr: |
-          rate(llm_schema_violation_total[5m]) > 20
-        for: 5m
-        labels:
-          severity: warning
-          service: deterministic-workflow-framework
-        annotations:
-          summary: "LLM schema violations spiking"
-          description: "{{ $value }}/min schema violations in {{ $labels.environment }}. Check LLM model and prompts."
-
-      - alert: NoActiveConversations
-        expr: |
-          conversations_active == 0
-        for: 10m
-        labels:
-          severity: info
-          service: deterministic-workflow-framework
-        annotations:
-          summary: "No active conversations"
-          description: "Zero active conversations for 10 minutes in {{ $labels.environment }}. Verify deployment health."
-
-      - alert: CompletionRateDrop
-        expr: |
-          completion_rate < 50
-        for: 15m
-        labels:
-          severity: warning
-          service: deterministic-workflow-framework
-        annotations:
-          summary: "Completion rate dropped below 50%"
-          description: "Completion rate is {{ $value }}% in {{ $labels.environment }}. Check workflow and goal_check behavior."
+# Alert rule schema — generated into provider-native format at deploy time
+alert_rule_schema:
+  name: string                          # unique alert name (e.g. "HighErrorRate")
+  severity: critical | warning | info
+  condition:
+    metric: string                      # Prometheus metric name or provider metric
+    operator: gt | lt | gte | lte | eq
+    threshold: number
+    duration: string                    # e.g. "5m", "10m" — condition must persist
+    rate_window?: string                # for rate-based conditions, e.g. "5m"
+  labels:
+    service: string
+    environment: string
+    team?: string                       # owning team for routing
+  annotations:
+    summary: string                     # short description (e.g. "Error rate exceeds 5%")
+    description_template: string        # template with {{ $value }}, {{ $labels.xxx }}
+    runbook_url?: string                # link to troubleshooting guide
+  notification:
+    channels:                           # one or more delivery targets
+      - type: pagerduty | slack | email | webhook
+        routing_key?: string
+        webhook_url?: string
+        channel?: string                # Slack channel, if type=slack
+        repeat_interval?: string        # e.g. "5m", "15m", "1h"
 ```
+
+**Alert rules summary (derived from above schema):**
+
+| Alert | Condition | Severity | Duration |
+|-------|-----------|----------|----------|
+| HighErrorRate | `errorNode_invocations / messages_processed > 5%` | critical | 5m |
+| LLMLatencySpike | `p95 latency > 5s` | warning | 5m |
+| HighGoalCheck422Rate | `goal_check_422_rate > 10%` | warning | 5m |
+| SchemaViolationSpike | `schema_violations > 20/min` | warning | 5m |
+| NoActiveConversations | `conversations_active == 0` | info | 10m |
+| CompletionRateDrop | `completion_rate < 50%` | warning | 15m |
 
 ### 4.3 Alert Routing
 
@@ -692,7 +620,108 @@ observability:
 
 ---
 
-## 7. Open Questions
+## 7. Implementation Options
+
+### 7.1 Option A: Grafana + Prometheus (Current Baseline)
+
+Self-hosted open-source stack. Prometheus scrapes the framework's `/metrics` endpoint; Grafana renders dashboards and evaluates alert rules via Alertmanager.
+
+| Aspect | Detail |
+|--------|--------|
+| Strengths | No vendor lock-in; zero licensing cost; rich community dashboards; direct PromQL access; GitOps-friendly (dashboards as code) |
+| Weaknesses | Operational burden (run and maintain Prometheus, Grafana, Alertmanager); storage scaling (Prometheus TSDB); no built-in log aggregation; multi-cluster federation is complex |
+| Best for | Teams with existing Kubernetes/Prometheus infrastructure; cost-sensitive deployments; open-source-first organizations |
+
+### 7.2 Option B: Datadog
+
+SaaS observability platform. The framework emits metrics, traces, and logs to the Datadog agent; dashboards and alerts are configured in the Datadog UI or via Terraform/dd-agent YAML.
+
+```yaml
+# framework.yaml — Datadog integration
+observability:
+  provider: datadog
+  datadog:
+    api_key: "${DD_API_KEY}"
+    site: "${DD_SITE:-datadoghq.com}"
+    metrics:
+      enabled: true
+      statsd_port: 8125
+      dogstatsd: true
+    tracing:
+      enabled: true
+      agent_host: "${DD_AGENT_HOST}"
+    logs:
+      enabled: true
+      intake_url: "https://http-intake.logs.${DD_SITE}"
+    dashboards:
+      auto_provision: true          # Terraform-managed or API-driven
+    monitors:                       # Datadog-native alert definitions
+      - name: "High Error Rate"
+        type: metric alert
+        query: "avg:error_node.invocations.rate{*} > 5"
+        message: "Error rate exceeded 5% — check @llm-ops"
+        tags: ["service:deterministic-workflow", "env:${ENV}"]
+```
+
+| Aspect | Detail |
+|--------|--------|
+| Strengths | Fully managed; unified metrics/logs/traces in one platform; rich APM; built-in anomaly detection; no infrastructure to maintain |
+| Weaknesses | Per-host pricing can be expensive at scale; vendor lock-in; custom metrics cost extra; data residency concerns for regulated industries |
+| Best for | Teams without dedicated observability infra; organizations already on Datadog; rapid setup with minimal ops |
+
+### 7.3 Option C: OpenTelemetry (Vendor-Neutral)
+
+The framework instruments with the OpenTelemetry SDK (traces, metrics, logs). An OTel Collector receives and exports telemetry to the backend(s) of choice — Prometheus, Datadog, Grafana Cloud, or any OTLP-compatible backend.
+
+```yaml
+# framework.yaml — OpenTelemetry integration
+observability:
+  provider: opentelemetry
+  otel:
+    exporter:
+      protocol: otlp | grpc | http
+      endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+    traces:
+      enabled: true
+      sampler: parentbased_traceidratio
+      sample_rate: 1.0
+    metrics:
+      enabled: true
+      export_interval_ms: 15000
+      prometheus_exporter: true      # also expose /metrics for local scraping
+    logs:
+      enabled: true
+      log_level: info
+    resource:
+      service.name: "deterministic-workflow-framework"
+      service.version: "0.2.0"
+      deployment.environment: "${ENV}"
+```
+
+| Aspect | Detail |
+|--------|--------|
+| Strengths | Vendor-neutral standard (CNCF); swap backends without code changes; growing ecosystem; future-proof instrumentation investment |
+| Weaknesses | OTel is still maturing (metrics SDK stable, logs SDK experimental); added collector component to run; fewer turnkey dashboards than native solutions |
+| Best for | Multi-cloud or multi-vendor strategy; teams planning backend migrations; organizations standardizing on OTel |
+
+### 7.4 Comparison Matrix
+
+| Dimension | Option A (Grafana+Prometheus) | Option B (Datadog) | Option C (OpenTelemetry) |
+|-----------|------------------------------|--------------------|--------------------------|
+| Vendor lock-in | None (open source) | High (proprietary) | None (open standard) |
+| Operational burden | High (self-hosted) | Low (SaaS, fully managed) | Medium (run OTel Collector) |
+| Cost structure | Infrastructure only | Per-host + per-custom-metric | Infrastructure (Collector) + backend |
+| Logs + metrics + traces | Separate tools (Loki + Prometheus + Tempo) | Unified platform | Unified SDK → any backend |
+| Dashboard richness | High (community + custom) | Very high (built-in + custom) | Dependent on backend |
+| Anomaly detection | Manual thresholds | Built-in ML-based | Dependent on backend |
+| Setup time | Hours (manual provisioning) | Minutes (agent install) | Hours (Collector + backend config) |
+| Compliance / data residency | Fully controlled (self-hosted) | Regional endpoints available | Controlled by Collector + backend choice |
+| Ecosystem maturity | Very mature | Very mature | Maturing (metrics stable, logs beta) |
+| Migration path | Native PromQL queries | Proprietary query language | Swap OTLP endpoint to change backends |
+
+---
+
+## 8. Open Questions
 
 | # | Question | Impact |
 |---|----------|--------|

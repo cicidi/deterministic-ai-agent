@@ -11,6 +11,7 @@
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial environment config spec: dev, e2e, prod |
 | 2026-06-17 | 0.2.0 | Section 3 comparison table: add LLM +1 extra retry note; Section 5: add Option B (Cloud Secret Manager) as alternative config strategy |
+| 2026-06-17 | 0.4.0 | Section 3 table: add max_attempts row; add §6 Implementation Options (Env File Hierarchy vs External Config Server) with comparison matrix |
 
 ---
 
@@ -131,6 +132,7 @@ SENSITIVE_FIELD_MASK=partial_mask
 | `MOCK_EXTERNAL_APIS` | true | true | false |
 | `PII_SCRUBBING` | optional | enabled | enabled |
 | `LANGSMITH_TRACING` | false | true | true |
+| `max_attempts` | 1 | 2 | 2 |
 
 ## 4. `framework.yaml` Environment-Specific Sections
 
@@ -257,7 +259,62 @@ environments:
 
 ---
 
-## 6. Open Questions
+## 6. Implementation Options
+
+### 6.1 Option A: Env File Hierarchy (Recommended)
+
+The framework loads `.env` → `.env.local` → `.env.{ENV}` from the filesystem. Later files override earlier ones. This is the default strategy and requires no external infrastructure.
+
+| Aspect | Detail |
+|--------|--------|
+| Strengths | Zero dependencies; easy local development; GitOps-friendly (base `.env` committed, secrets in `.env.local` gitignored); simple to reason about |
+| Weaknesses | Secret rotation requires redeploy or file watcher; no centralized audit of config changes; multi-instance drift risk if file sync lags |
+| Best for | Single-region deployments; teams without existing secret management infrastructure; fast local iteration |
+
+### 6.2 Option B: External Config Server (Consul / Vault)
+
+Config is stored in an external secret/config server. The framework fetches or subscribes to config at bootstrap, with optional hot-reload via long-poll or watch.
+
+```yaml
+# framework.yaml — external config server strategy
+config_loading:
+  strategy: cloud_secret_manager
+  sources:
+    - type: hashicorp_vault
+      address: "${VAULT_ADDR}"
+      mount_path: "secret/deterministic-workflow/${ENV}"
+      auth_method: kubernetes
+    - type: aws_secrets_manager
+      region: "${AWS_REGION}"
+      secret_id: "deterministic-workflow/${ENV}"
+  merge: cloud_overrides_file
+  hot_reload:
+    enabled: true
+    poll_interval_seconds: 60
+```
+
+| Aspect | Detail |
+|--------|--------|
+| Strengths | Centralized secret rotation; dynamic config update without redeploy; built-in audit log for config access; no file drift across instances |
+| Weaknesses | External dependency (Vault/Consul cluster); added latency at bootstrap; operational complexity for dev environments; harder to version-control config changes |
+| Best for | Multi-region production; regulated industries requiring secret rotation audit; teams already running HashiCorp or AWS infrastructure |
+
+### 6.3 Comparison Matrix
+
+| Dimension | Option A (Env File Hierarchy) | Option B (External Config Server) |
+|-----------|------------------------------|----------------------------------|
+| Setup complexity | Low — files only | High — run config server cluster |
+| Secret rotation | Manual (re-deploy or file watcher) | Automated (server-native rotation) |
+| Config audit trail | Git history only | Config server access logs |
+| Hot-reload | Not supported (restart required) | Supported (poll or watch) |
+| Multi-instance drift | Possible (file sync lag) | None (single source of truth) |
+| Dev experience | Excellent (local files) | Requires local Vault/Consul or mock |
+| Compliance | Basic (Git + file permissions) | Strong (access logs, rotation policies) |
+| Infrastructure cost | None | Config server cluster + maintenance |
+
+---
+
+## 7. Open Questions
 
 1. **Secrets rotation strategy**: How should secrets (API keys, DB credentials) be rotated across environments? Should the framework support automatic rotation via cloud provider secret stores (AWS Secrets Manager, GCP Secret Manager), or is manual rotation sufficient for v0?
 

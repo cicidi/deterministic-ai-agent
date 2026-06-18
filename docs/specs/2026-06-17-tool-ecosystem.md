@@ -12,6 +12,7 @@
 | 2026-06-17 | 0.1.0 | Initial tool ecosystem spec |
 | 2026-06-17 | 0.2.0 | Replace Python code blocks with YAML config examples; add errorNode failure routing (Section 6.4); add Open Questions (Section 13) |
 | 2026-06-17 | 0.3.0 | Section 2.2 LangFlow mapping table: change "Error Handler" → "ErrorNode"; add Section 6 Permission Enforcement (pycasbin) |
+| 2026-06-17 | 0.4.0 | Fix section numbering for §7–§10 sub-sections; change ErrorNode to errorNode (camelCase) in LangFlow mapping table |
 
 ---
 
@@ -91,7 +92,7 @@ Our Framework loads YAML → generates LangGraph graph
 | `Decision` | `DecisionNode` | rule engine, LLM fallback |
 | `Sub-Workflow` | `SubWorkflowInvoker` | sub_workflow name, sync/async, input_mapping |
 | `Respond` | `ResponseGenerator` | response_strategy (pure_message / widget) |
-| `ErrorNode` | `ErrorNode` | strategy (clarify / escalate / terminate) |
+| `errorNode` | `ErrorNode` | strategy (clarify / escalate / terminate) |
 
 ### 2.3 Installation
 
@@ -406,7 +407,7 @@ workflows:
 
 ## 7. Tool Servers (MCP + API + Command)
 
-### 6.1 MCP Server Integration
+### 7.1 MCP Server Integration
 
 Our framework nodes can call MCP servers as tools. MCP servers expose capabilities (vector search, knowledge base query, external API) that nodes invoke within their permission allowlist.
 
@@ -426,7 +427,7 @@ mcp_servers:
   # Available tools: vector_search, payment_charge, payment_refund, ...
 ```
 
-### 6.2 Tool Registration
+### 7.2 Tool Registration
 
 Register tools (API, MCP, command) via YAML configuration:
 
@@ -462,7 +463,7 @@ tools:
       sandbox: true
 ```
 
-### 6.3 Claude Desktop Integration
+### 7.3 Claude Desktop Integration
 
 When the framework is used with Claude Desktop, MCP tools are auto-exposed:
 
@@ -481,7 +482,7 @@ When the framework is used with Claude Desktop, MCP tools are auto-exposed:
 }
 ```
 
-### 6.4 Tool Failure Routing to `errorNode`
+### 7.4 Tool Failure Routing to `errorNode`
 
 When a tool invocation fails (timeout, permission denied, invalid response), the framework routes the execution to a configured `errorNode` instead of crashing the workflow:
 
@@ -513,11 +514,11 @@ This ensures deterministic behavior: every tool failure has a defined recovery p
 
 ## 8. State Machine — `transitions`
 
-### 7.1 Role
+### 8.1 Role
 
 Python `transitions` library provides the deterministic FSM layer. Our framework generates a `transitions.Machine` from the Domain Model YAML (states + transitions + guards), then wraps it into a LangGraph node.
 
-### 7.2 Graphviz Export
+### 8.2 Graphviz Export
 
 Configure FSM visualization via YAML and export to Graphviz:
 
@@ -535,7 +536,7 @@ fsm:
   # Exported as static FSM diagram for documentation
 ```
 
-### 7.3 Integration Flow
+### 8.3 Integration Flow
 
 ```
 domain-model.yaml
@@ -557,14 +558,14 @@ Visualization:
 
 ## 9. PII Detection — Presidio
 
-### 8.1 Role
+### 9.1 Role
 
 Microsoft Presidio provides PII detection and anonymization for:
 - Response scrubbing (before delivery to user)
 - LLM prompt filtering (before sending data to LLM)
 - Audit log redaction
 
-### 8.2 Integration
+### 9.2 Integration
 
 Framework auto-configures Presidio based on domain model PII rules. Configuration is declarative:
 
@@ -592,7 +593,7 @@ pii_rules:
 
 ## 10. LLM Providers
 
-### 9.1 Supported Providers
+### 10.1 Supported Providers
 
 | Provider | Package | Use |
 |----------|---------|-----|
@@ -601,7 +602,7 @@ pii_rules:
 | **Local (Ollama)** | `langchain-ollama` | Offline extraction, PII-safe processing |
 | **Azure OpenAI** | `langchain-openai` | Enterprise deployments |
 
-### 9.2 Provider Configuration
+### 10.2 Provider Configuration
 
 ```yaml
 # framework.yaml

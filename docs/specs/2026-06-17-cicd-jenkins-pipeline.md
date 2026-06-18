@@ -10,6 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial CI/CD pipeline spec: Jenkins stages, mock/real LLM eval, environment promotion, rollback |
+| 2026-06-17 | 0.2.0 | Strip all Groovy implementation code; replace with YAML pipeline stage schemas; add declarative deploy descriptions; add Implementation Options comparison (Jenkins, GitHub Actions, GitLab CI) |
 
 ---
 
@@ -211,280 +212,306 @@ Runs evals against the changed workflow using real LLM calls. Triggered only on 
     trigger: merge_to_main
     environment: dev
     steps:
-      - name: "Deploy to dev"
-        command: |
-          kubectl set image deployment/deterministic-workflow-dev \
-            workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-            --namespace=dev
-        timeout_minutes: 3
-      - name: "Smoke test"
-        command: |
-          python scripts/smoke_test.py \
-            --env=dev \
-            --endpoint="https://dev-api.example.com"
-        timeout_minutes: 2
+      - deploy:
+          type: kubernetes
+          namespace: dev
+          deployment: deterministic-workflow-dev
+          container: workflow
+          image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+          timeout_minutes: 3
+      - smoke_test:
+          environment: dev
+          endpoint: "https://dev-api.example.com"
+          timeout_minutes: 2
 
   deploy_e2e:
     name: "Deploy to e2e"
-    trigger: manual                    # manual trigger from Jenkins UI
+    trigger: manual
     environment: e2e
+    gates:
+      - type: manual_approval
+        message: "Deploy build ${BUILD_NUMBER} to E2E?"
     steps:
-      - name: "Deploy to e2e"
-        command: |
-          kubectl set image deployment/deterministic-workflow-e2e \
-            workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-            --namespace=e2e
-      - name: "E2E smoke test"
-        command: |
-          python scripts/smoke_test.py \
-            --env=e2e \
-            --endpoint="https://e2e-api.example.com"
-      - name: "Run integration tests"
-        command: |
-          python -m pytest tests/integration/ \
-            --env=e2e \
-            --junitxml=results/integration-results.xml
-        timeout_minutes: 10
+      - deploy:
+          type: kubernetes
+          namespace: e2e
+          deployment: deterministic-workflow-e2e
+          container: workflow
+          image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+      - smoke_test:
+          environment: e2e
+          endpoint: "https://e2e-api.example.com"
+      - integration_test:
+          environment: e2e
+          suite: "tests/integration/"
+          report: "results/integration-results.xml"
+          timeout_minutes: 10
 
   deploy_prod:
     name: "Deploy to prod"
-    trigger: manual                    # manual + approval gate
+    trigger: manual
     environment: prod
-    approval:
-      type: input                      # Jenkins input step
-      message: "Deploy build ${BUILD_NUMBER} to production?"
-      approvers:
-        - release-managers
+    gates:
+      - type: manual_approval
+        message: "Deploy build ${BUILD_NUMBER} to production?"
+        approvers:
+          - release-managers
     steps:
-      - name: "Deploy to prod (canary)"
-        command: |
-          kubectl set image deployment/deterministic-workflow-prod-canary \
-            workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-            --namespace=prod
-      - name: "Canary monitoring (10 min)"
-        command: |
-          python scripts/monitor_canary.py \
-            --env=prod \
-            --duration-minutes=10 \
-            --error-rate-threshold=5 \
-            --latency-threshold-p95=5
-      - name: "Full prod rollout"
-        command: |
-          kubectl set image deployment/deterministic-workflow-prod \
-            workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-            --namespace=prod
-      - name: "Post-deploy smoke test"
-        command: |
-          python scripts/smoke_test.py \
-            --env=prod \
-            --endpoint="https://api.example.com"
+      - deploy_canary:
+          type: kubernetes
+          namespace: prod
+          deployment: deterministic-workflow-prod-canary
+          container: workflow
+          image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+      - monitor_canary:
+          duration_minutes: 10
+          error_rate_threshold: 5
+          latency_p95_threshold_ms: 5000
+          auto_rollback: true
+      - deploy_full:
+          type: kubernetes
+          namespace: prod
+          deployment: deterministic-workflow-prod
+          container: workflow
+          image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+      - smoke_test:
+          environment: prod
+          endpoint: "https://api.example.com"
 ```
 
 ---
 
-## 3. Jenkinsfile Example (Declarative)
+## 3. Pipeline Stage Schema (YAML)
 
-```groovy
-// Jenkinsfile — Deterministic Workflow Framework
-pipeline {
-    agent {
-        kubernetes {
-            yaml '''
-apiVersion: v1
-kind: Pod
-spec:
-  containers:
-    - name: python
-      image: python:3.12
-      command: ['sleep', 'infinity']
-      resources:
-        requests:
-          cpu: '2'
-          memory: '4Gi'
-'''
-        }
-    }
+The pipeline is defined as a YAML schema — not as runnable Groovy. Each CI/CD platform consumes this schema and translates it to its native pipeline definition format.
 
-    environment {
-        ENV = 'ci'
-        DOCKER_REGISTRY = credentials('docker-registry')
-        OPENAI_API_KEY_CREDENTIAL = credentials('openai-api-key')
-        LANGSMITH_API_KEY = credentials('langsmith-api-key')
-    }
+```yaml
+# pipeline.yaml — Pipeline Stage Schema (declarative, not implementation code)
+pipeline:
+  name: "deterministic-workflow-ci-cd"
+  version: "0.2.0"
 
-    options {
-        timeout(time: 60, unit: 'MINUTES')
-        buildDiscarder(logRotator(numToKeepStr: '30'))
-        timestamps()
-    }
+  agent:
+    type: container
+    image: "python:3.12"
+    resources:
+      cpu: "2"
+      memory: "4Gi"
 
-    stages {
-        stage('Lint') {
-            when {
-                anyOf { branch '**'; changeRequest() }
-            }
-            steps {
-                sh 'pip install ruff'
-                sh 'ruff check .'
-                sh 'pip install mypy'
-                sh 'mypy src/ --strict'
-            }
-        }
+  environment:
+    ENV: ci
+    DOCKER_REGISTRY:
+      from: credential
+      id: "docker-registry"
+    OPENAI_API_KEY:
+      from: credential
+      id: "openai-api-key"
+    LANGSMITH_API_KEY:
+      from: credential
+      id: "langsmith-api-key"
 
-        stage('Eval — Mock LLM') {
-            when {
-                anyOf { branch '**'; changeRequest() }
-            }
-            steps {
-                sh '''
-                    pip install -r requirements-dev.txt
-                    python -m pytest tests/evals/ \
-                        --eval-dataset=home-insurance-eval \
-                        --mock-llm \
-                        --junitxml=results/eval-mock-results.xml
-                '''
-            }
-            post {
-                always {
-                    junit 'results/eval-mock-results.xml'
-                }
-            }
-        }
+  options:
+    timeout_minutes: 60
+    build_retention:
+      keep_count: 30
+    timestamps: true
 
-        stage('Eval — Real LLM') {
-            when {
-                changeRequest()
-                beforeAgent true
-            }
-            steps {
-                script {
-                    def changedWorkflows = sh(
-                        script: '''
-                            git diff --name-only origin/main...HEAD -- workflows/ |
-                            xargs -I {} basename {} .yaml |
-                            tr '\\n' ',' | sed 's/,$//'
-                        ''',
-                        returnStdout: true
-                    ).trim()
+  triggers:
+    - type: push
+      branches: ["**"]
+    - type: pull_request
+      branches: ["main"]
+    - type: merge_to_main
+      branches: ["main"]
+      condition: "not pull_request"
 
-                    echo "Changed workflows: ${changedWorkflows}"
-                }
-                sh """
-                    python -m pytest tests/evals/ \
-                        --eval-dataset=home-insurance-eval \
-                        --real-llm \
-                        --changed-workflows="${changedWorkflows}" \
-                        --junitxml=results/eval-real-results.xml \
-                        --langsmith-project="ci-evals"
-                """
-            }
-            post {
-                always {
-                    junit 'results/eval-real-results.xml'
-                }
-            }
-        }
+  stages:
+    lint:
+      name: "Lint"
+      trigger: push_or_pr
+      agent: container
+      parallel:
+        - name: "Python lint (ruff)"
+          run: "ruff check ."
+          timeout_minutes: 2
+        - name: "YAML validation"
+          run: "python scripts/validate_workflows.py"
+          timeout_minutes: 2
+        - name: "Type check (mypy)"
+          run: "mypy src/ --strict"
+          timeout_minutes: 3
+      on_failure: stop_pipeline
 
-        stage('Build') {
-            when {
-                branch 'main'
-                not { changeRequest() }
-            }
-            steps {
-                sh """
-                    docker build \
-                        --tag "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-                        --tag "${DOCKER_REGISTRY}/deterministic-workflow:latest" \
-                        --build-arg ENV=prod \
-                        .
-                    docker push "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
-                """
-            }
-        }
+    eval_mock:
+      name: "Eval (Mock LLM)"
+      trigger: push_or_pr
+      env:
+        LLM_MODE: mock
+      steps:
+        - name: "Install dev dependencies"
+          run: "pip install -r requirements-dev.txt"
+        - name: "Run mock eval suite"
+          run: >
+            python -m pytest tests/evals/
+            --eval-dataset=home-insurance-eval
+            --mock-llm
+            --junitxml=results/eval-mock-results.xml
+          timeout_minutes: 5
+      post:
+        always:
+          - publish_junit: "results/eval-mock-results.xml"
+      on_failure: stop_pipeline
 
-        stage('Deploy — dev') {
-            when {
-                branch 'main'
-                not { changeRequest() }
-            }
-            steps {
-                sh """
-                    kubectl set image deployment/deterministic-workflow-dev \
-                        workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-                        --namespace=dev
-                """
-                sh 'python scripts/smoke_test.py --env=dev'
-            }
-        }
+    eval_real:
+      name: "Eval (Real LLM)"
+      trigger: pull_request_only
+      env:
+        LLM_MODE: real
+        OPENAI_API_KEY:
+          from: credential
+          id: "openai-api-key"
+        LANGSMITH_TRACING: "true"
+      steps:
+        - name: "Detect changed workflows"
+          detect_changes:
+            pattern: "workflows/*.yaml"
+            output_variable: CHANGED_WORKFLOWS
+        - name: "Run eval on changed workflows"
+          run: >
+            python -m pytest tests/evals/
+            --eval-dataset=home-insurance-eval
+            --real-llm
+            --changed-workflows="${CHANGED_WORKFLOWS}"
+            --junitxml=results/eval-real-results.xml
+            --langsmith-project="ci-evals"
+          timeout_minutes: 15
+      post:
+        always:
+          - archive_artifacts: "results/eval-real-results.xml"
+          - publish_junit: "results/eval-real-results.xml"
+      gates:
+        - metric: "intent_accuracy"
+          threshold: ">= 0.90"
+        - metric: "goal_check_pass_rate"
+          threshold: ">= 0.85"
+        - metric: "schema_violation_rate"
+          threshold: "<= 0.05"
+      on_failure: stop_pipeline
 
-        stage('Deploy — e2e') {
-            when {
-                branch 'main'
-                not { changeRequest() }
-            }
-            input {
-                message "Deploy build ${BUILD_NUMBER} to e2e?"
-                ok "Deploy to e2e"
-            }
-            steps {
-                sh """
-                    kubectl set image deployment/deterministic-workflow-e2e \
-                        workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-                        --namespace=e2e
-                """
-                sh 'python scripts/smoke_test.py --env=e2e'
-                sh 'python -m pytest tests/integration/ --env=e2e --junitxml=results/integration-results.xml'
-                junit 'results/integration-results.xml'
-            }
-        }
+    build:
+      name: "Build Docker Image"
+      trigger: merge_to_main
+      env:
+        DOCKER_REGISTRY:
+          from: credential
+          id: "docker-registry"
+      steps:
+        - name: "Build Docker image"
+          build_image:
+            tags:
+              - "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+              - "${DOCKER_REGISTRY}/deterministic-workflow:latest"
+            build_args:
+              ENV: prod
+          timeout_minutes: 5
+        - name: "Push to registry"
+          push_image:
+            tags:
+              - "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+              - "${DOCKER_REGISTRY}/deterministic-workflow:latest"
+          timeout_minutes: 5
+      on_failure: stop_pipeline
 
-        stage('Deploy — prod') {
-            when {
-                branch 'main'
-                not { changeRequest() }
-            }
-            input {
-                message "Deploy build ${BUILD_NUMBER} to PRODUCTION?"
-                ok "Deploy to production"
-                submitter "release-managers"
-            }
-            steps {
-                sh """
-                    kubectl set image deployment/deterministic-workflow-prod-canary \
-                        workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-                        --namespace=prod
-                """
-                sh 'python scripts/monitor_canary.py --env=prod --duration-minutes=10'
-                sh """
-                    kubectl set image deployment/deterministic-workflow-prod \
-                        workflow="${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}" \
-                        --namespace=prod
-                """
-                sh 'python scripts/smoke_test.py --env=prod'
-            }
-        }
-    }
+    deploy_dev:
+      name: "Deploy to Dev"
+      trigger: merge_to_main
+      env: dev
+      steps:
+        - name: "Deploy to dev"
+          deploy:
+            type: kubernetes
+            environment: dev
+            namespace: dev
+            deployment: deterministic-workflow-dev
+            container: workflow
+            image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+          timeout_minutes: 3
+        - name: "Smoke test"
+          run: "python scripts/smoke_test.py --env=dev"
+          timeout_minutes: 2
 
-    post {
-        always {
-            cleanWs()
-        }
-        failure {
-            slackSend(
-                channel: '#ci-alerts',
-                color: 'danger',
-                message: "Pipeline failed: ${env.JOB_NAME} #${env.BUILD_NUMBER} — <${env.BUILD_URL}|View>"
-            )
-        }
-        success {
-            slackSend(
-                channel: '#ci-alerts',
-                color: 'good',
-                message: "Pipeline succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} — <${env.BUILD_URL}|View>"
-            )
-        }
-    }
-}
+    deploy_e2e:
+      name: "Deploy to E2E"
+      trigger: manual
+      env: e2e
+      steps:
+        - name: "Deploy to e2e"
+          deploy:
+            type: kubernetes
+            environment: e2e
+            namespace: e2e
+            deployment: deterministic-workflow-e2e
+            container: workflow
+            image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+        - name: "E2E smoke test"
+          run: "python scripts/smoke_test.py --env=e2e"
+        - name: "Run integration tests"
+          run: >
+            python -m pytest tests/integration/
+            --env=e2e
+            --junitxml=results/integration-results.xml
+          timeout_minutes: 10
+      gates:
+        - type: manual_approval
+          message: "Deploy build ${BUILD_NUMBER} to E2E?"
+
+    deploy_prod:
+      name: "Deploy to Production"
+      trigger: manual
+      env: prod
+      gates:
+        - type: manual_approval
+          message: "Deploy build ${BUILD_NUMBER} to production?"
+          approvers: [release-managers]
+      steps:
+        - name: "Deploy to prod (canary)"
+          deploy:
+            type: kubernetes
+            environment: prod
+            namespace: prod
+            deployment: deterministic-workflow-prod-canary
+            container: workflow
+            image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+        - name: "Canary monitoring"
+          monitor:
+            duration_minutes: 10
+            error_rate_threshold: 5
+            latency_threshold_p95: 5
+            auto_rollback: true
+        - name: "Full prod rollout"
+          deploy:
+            type: kubernetes
+            environment: prod
+            namespace: prod
+            deployment: deterministic-workflow-prod
+            container: workflow
+            image: "${DOCKER_REGISTRY}/deterministic-workflow:${BUILD_NUMBER}"
+        - name: "Post-deploy smoke test"
+          run: "python scripts/smoke_test.py --env=prod"
+
+  post:
+    always:
+      - clean_workspace: true
+    on_failure:
+      - notify:
+          channel: "#ci-alerts"
+          status: danger
+          message: "Pipeline failed: ${JOB_NAME} #${BUILD_NUMBER}"
+    on_success:
+      - notify:
+          channel: "#ci-alerts"
+          status: good
+          message: "Pipeline succeeded: ${JOB_NAME} #${BUILD_NUMBER}"
 ```
 
 ---
