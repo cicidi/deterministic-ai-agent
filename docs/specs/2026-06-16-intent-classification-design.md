@@ -409,7 +409,7 @@ Each intent is mapped to a typed extraction payload consumed by the Extract node
 | `help` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
 | `chitchat` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
 | `repeat` | ReadOnlyAgent | *(skip extraction)* | replay last assistant message |
-| `provide_information` | WriteAgent | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
+| `provide_information` | — | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
 | `complaint` | EscalationAgent | `ComplaintIntentPayload` | `subject: str, details: str` |
 | `escalate` | EscalationAgent | `EscalateIntentPayload` | `reason: str, urgency: str` |
 

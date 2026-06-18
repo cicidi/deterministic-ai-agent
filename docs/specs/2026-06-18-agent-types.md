@@ -117,7 +117,6 @@ class WriteAgent(Protocol):
         - renew_policy (domain-specific: renew policy)
         - update_policy (domain-specific: modify policy)
         - cancel_policy (domain-specific: cancel policy)
-        - provide_information (slot-filling during multi-turn workflows)
 
     Backend examples:
         - State machine executor with API calls to backend services
@@ -236,7 +235,6 @@ def dispatch_agent(intent: str, intent_defs: dict) -> type[Protocol]:
         "ask_about_claim_status": ReadOnlyAgent,     # claim lookup → read
 
         # WriteAgent intents
-        "provide_information":   WriteAgent,         # slot-filling → write
         "get_quote":             WriteAgent,         # create quote → write
         "file_claim":            WriteAgent,         # create claim → write
         "renew_policy":          WriteAgent,         # renew → write
@@ -250,7 +248,7 @@ def dispatch_agent(intent: str, intent_defs: dict) -> type[Protocol]:
     return agent_map.get(intent)
 ```
 
-**Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`) are handled directly by the state machine — they are conversation control signals, not task execution.
+**Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `provide_information`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`) are handled directly by the state machine — they are conversation control or slot-filling signals, not task execution.
 
 ---
 
