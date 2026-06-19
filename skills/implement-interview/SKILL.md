@@ -7,11 +7,15 @@ user-invocable: true
 
 # Implement Interview — Deterministic Workflow Framework
 
+**Industry-agnostic.** This skill works for any regulated industry: fintech (insurance, banking, payment), healthcare, legal, government, or any domain needing auditable, deterministic agent workflows. All questions are generic — never assume the industry unless the developer states it. The framework is a pattern, not a pre-built product.
+
 ## When to Use
 
 A developer says "I want to build X using this framework" and wants runnable code, not just a plan document. The skill interviews the developer through a time-boxed adaptive process and generates a complete Python project.
 
 **This skill IS the `spec-generator` from VISION.md**, upgraded to produce code instead of documents.
+
+**Supported industries:** Any. The interview asks generic questions about users, workflows, entities, and decisions. The framework's three-layer architecture (NLU → Decision → Response) applies universally. Do NOT tailor questions to a specific industry unless the developer specifies one.
 
 ## When NOT to Use
 
@@ -69,13 +73,17 @@ Ask:
 
 Ask these questions in order. Single question per message.
 
-1. **What product are you building?** (e.g., "insurance claims chatbot", "payment collection agent")
+1. **What product are you building?** Describe it in one sentence — no industry jargon assumed.
+   - Good: "A claims processing chatbot for auto insurance"
+   - Good: "A patient intake agent for a medical clinic"
+   - Good: "A payment dispute resolution agent for a bank"
+   - Good: "A permit application assistant for city government"
 
-2. **Who are the users?** (e.g., "internal claims adjusters", "external banking customers")
+2. **Who are the users?** What roles interact with this agent? (e.g., "customers + support agents", "patients + doctors", "citizens + case workers")
 
-3. **What is the primary goal?** What does a successful interaction look like?
+3. **What is the primary goal?** What does a successful interaction look like? Describe the outcome, not the steps.
 
-4. **What is the #1 MVP workflow?** Describe step by step what the user says and what the agent does in response. Only one workflow at this level. (e.g., "User says 'I want to file a claim' → agent asks for policy number → agent asks for incident date → agent asks for description → agent confirms and submits")
+4. **What is the #1 MVP workflow?** Describe step by step what the user says and what the agent does in response. Only one workflow at this level. Use generic terms (entity A requests X → agent collects fields Y, Z → agent produces result W).
 
 ### Level 2: Domain Model (30min+ only, ~5-8 min)
 
@@ -307,8 +315,9 @@ Next: cd {dir} && pip install -r requirements.txt && python main.py
 | **Not asking about privacy between user types** | Borrower and officer shouldn't see each other's contact info. You won't build it if you don't ask. | Ask in Completeness Verification step 3. |
 | **The "strategy defaults" trap** | Using spec defaults for extract/validate/transform is fine. But critical business decisions (payment model, privacy model, multi-party flows) have NO defaults — they MUST be asked. | Distinguish between "framework defaults" (safe to skip) and "business decisions" (must ask). |
 | **Committing = done** | Commits track progress, not completion. The work isn't done until the Completeness Verification passes. | Run the verification checklist before every "done" declaration. |
-| Generating a 50-page Markdown plan instead of code | The output is Python code. The only Markdown output is README.md with next steps. |
-| Asking prompt engineering questions | LLM prompts are generated from spec templates. Prompt optimization is a separate task. |
+| **Asking mortgage-specific questions for a non-mortgage product** | The framework is industry-agnostic. Never assume "borrower," "loan," "claim" unless the developer states the domain. | Use generic terms: "entity," "workflow step," "user role." Let the developer name their own concepts. |
+| Generating a 50-page Markdown plan instead of code | The output is Python code. The only Markdown output is PRD.md + a README reference. | Code generation happens after PRD approval. |
+| Asking prompt engineering questions | LLM prompts are generated from spec templates. Prompt optimization is a separate task. | Generate from templates; defer prompt tuning to post-MVP. |
 | Generating files over 1000 lines | Split before writing. Use $ref for YAML, sub-modules for Python. |
 
 ## Sources
