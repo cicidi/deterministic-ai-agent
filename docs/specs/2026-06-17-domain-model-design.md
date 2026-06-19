@@ -34,13 +34,13 @@ Transitions + guards              transform_strategy
 
 **Separation principle:** The Domain Model is reusable across workflows and products. The workflow configuration adds runtime strategy selection on top. This separation enables:
 
-1. **Cross-workflow reuse** — a `property_info` entity used in both `home_insurance_quote` and `home_insurance_refinance`
+1. **Cross-workflow reuse** — a `lead` entity used in both `mortgage_lead_submission` and `mortgage_lead_refinance`
 2. **Product-agnostic models** — same domain model across different implementations
 3. **Skill-driven generation** — a downstream skill can interview a developer to fill in the domain model, then the framework provides sensible defaults for the how
 
 ### 1.1 Implementation Approach
 
-Domain entities are defined using [OpenAPI 3.1 Schema Objects](https://spec.openapis.org/oas/latest.html#schema-object) (JSON Schema dialect), an industry-standard format with full ecosystem support — validators, code generators, IDE auto-complete, Swagger UI. The framework reads `components/schemas/` directly with no translation layer needed. `$ref` enables schema composition without duplication, and downstream API contracts are defined in the same format as domain entities. For a complete concrete example, see [Section 2.2](#22-complete-example--home-insurance) or [home-insurance.yaml](../../domain-models/home-insurance.yaml).
+Domain entities are defined using [OpenAPI 3.1 Schema Objects](https://spec.openapis.org/oas/latest.html#schema-object) (JSON Schema dialect), an industry-standard format with full ecosystem support — validators, code generators, IDE auto-complete, Swagger UI. The framework reads `components/schemas/` directly with no translation layer needed. `$ref` enables schema composition without duplication, and downstream API contracts are defined in the same format as domain entities. For a complete concrete example, see [Section 2.2](#22-complete-example--mortgage-lead) or [mortgage-lead.yaml](../../domain-models/mortgage-lead.yaml).
 
 #### Alternative Schema Formats (Context)
 
@@ -61,7 +61,7 @@ A Domain Model is defined in an OpenAPI 3.1-compliant YAML file:
 openapi: "3.1.0"
 
 info:
-  title: <domain name>        # e.g., "Home Insurance Domain Model"
+  title: <domain name>        # e.g., "Mortgage Lead Domain Model"
   version: <semantic version>
   description: <human-readable domain description>
 
@@ -91,36 +91,36 @@ components:
 
 ```
 docs/domain-models/
-  home-insurance.yaml          # Primary: HomeInsurance, UserInfo, Address, QuoteRequest, etc.
+  mortgage-lead.yaml          # Primary: MortgageLead, Borrower, Address, LeadSubmission, etc.
 ```
 
-For the complete concrete example, see [home-insurance.yaml](../../domain-models/home-insurance.yaml).
+For the complete concrete example, see [mortgage-lead.yaml](../../domain-models/mortgage-lead.yaml).
 
-### 2.2 Complete Example — Home Insurance
+### 2.2 Complete Example — Mortgage Lead
 
 The schema above instantiates into a concrete domain model like this:
 
 ```yaml
-# domain-models/home-insurance.yaml — OpenAPI components/schemas
+# domain-models/mortgage-lead.yaml — OpenAPI components/schemas
 components:
   schemas:
     Address:
       type: object
-      required: [street, city, province, postal_code]
+      required: [street, city, state, postal_code]
       properties:
         street:
           type: string
           minLength: 3
         city:
           type: string
-        province:
+        state:
           type: string
-          enum: [ON, QC, BC, AB, MB, SK, NS, NB, NL, PE, NT, YT, NU]
+          enum: [CA, NY, TX, FL, IL, PA, OH, GA, NC, MI]
         postal_code:
           type: string
-          pattern: "^[A-Za-z][0-9][A-Za-z] ?[0-9][A-Za-z][0-9]$"
+          pattern: "^[0-9]{5}(-[0-9]{4})?$"
 
-    UserInfo:
+    Borrower:
       type: object
       required: [first_name, last_name, email]
       properties:
@@ -130,46 +130,43 @@ components:
         phone:      { type: string, pattern: "^\\+?1?\\d{10}$" }
         date_of_birth: { type: string, format: date }
 
-    HomeInsurance:
-      description: "Complete home insurance application"
+    MortgageLead:
+      description: "Complete mortgage lead application"
       type: object
-      required: [owner, home_address, property_info, coverage_info]
+      required: [borrower, property_address, lead]
       properties:
-        owner:
-          $ref: "#/components/schemas/UserInfo"
-        home_address:
+        borrower:
+          $ref: "#/components/schemas/Borrower"
+        property_address:
           $ref: "#/components/schemas/Address"
-        property_info:
-          $ref: "#/components/schemas/PropertyInfo"
-        coverage_info:
-          $ref: "#/components/schemas/CoverageInfo"
+        lead:
+          $ref: "#/components/schemas/Lead"
 
-    QuoteRequest:
-      description: "Downstream API request for submitting a quote"
+    LeadSubmission:
+      description: "Downstream API request for submitting a lead"
       type: object
-      required: [applicant, property, coverage, quote_id]
+      required: [applicant, property, lead, application_id]
       properties:
-        quote_id:  { type: string, format: uuid }
-        applicant: { $ref: "#/components/schemas/UserInfo" }
+        application_id: { type: string, format: uuid }
+        applicant: { $ref: "#/components/schemas/Borrower" }
         property:
           type: object
-          required: [address, property_info]
+          required: [address]
           properties:
             address: { $ref: "#/components/schemas/Address" }
-            property_info: { $ref: "#/components/schemas/PropertyInfo" }
-        coverage:  { $ref: "#/components/schemas/CoverageInfo" }
+        lead: { $ref: "#/components/schemas/Lead" }
         requested_at: { type: string, format: date-time }
 
   # Framework state bindings
   x-state-bindings:
-    collect_policyholder_info:
-      entity: HomeInsurance
-      fields: [owner]
+    collect_borrower_info:
+      entity: MortgageLead
+      fields: [borrower]
     collect_property_address:
-      entity: HomeInsurance
-      fields: [home_address]
-    submit_quote:
-      entity: QuoteRequest
+      entity: MortgageLead
+      fields: [property_address]
+    submit_lead:
+      entity: LeadSubmission
 ```
 
 ### 2.3 Advanced Schema Patterns
@@ -179,82 +176,82 @@ OpenAPI/JSON Schema provides composition and constraint keywords that produce ri
 **Polymorphism (`oneOf` + `discriminator`) —** when a field's type depends on a runtime value:
 
 ```yaml
-IncidentReport:
+LoanScenario:
   type: object
-  required: [incident_type, details]
+  required: [scenario_type, details]
   properties:
-    incident_type:
+    scenario_type:
       type: string
-      enum: [fire, water_damage, theft]
+      enum: [rate_check, pre_approval, refinance]
     details:
       oneOf:
-        - $ref: "#/components/schemas/FireIncidentDetail"
-        - $ref: "#/components/schemas/WaterDamageDetail"
-        - $ref: "#/components/schemas/TheftDetail"
+        - $ref: "#/components/schemas/RateCheckDetail"
+        - $ref: "#/components/schemas/PreApprovalDetail"
+        - $ref: "#/components/schemas/RefinanceDetail"
       discriminator:
-        propertyName: incident_type
+        propertyName: scenario_type
         mapping:
-          fire: "#/components/schemas/FireIncidentDetail"
-          water_damage: "#/components/schemas/WaterDamageDetail"
-          theft: "#/components/schemas/TheftDetail"
+          rate_check: "#/components/schemas/RateCheckDetail"
+          pre_approval: "#/components/schemas/PreApprovalDetail"
+          refinance: "#/components/schemas/RefinanceDetail"
 ```
 
 **Composition (`allOf`) —** merge a base schema with extensions:
 
 ```yaml
-PremiumEstimate:
+LoanEstimate:
   allOf:
-    - $ref: "#/components/schemas/QuoteRequest"
+    - $ref: "#/components/schemas/LeadSubmission"
     - type: object
-      required: [monthly_premium, annual_premium]
+      required: [monthly_payment, annual_payment]
       properties:
-        monthly_premium: { type: number, minimum: 0 }
-        annual_premium:  { type: number, minimum: 0 }
+        monthly_payment: { type: number, minimum: 0 }
+        annual_payment:  { type: number, minimum: 0 }
 ```
 
 **Conditional validation (`if`/`then`/`else`) —** validate one field based on another's value:
 
 ```yaml
-CoverageInfo:
+Borrower:
   type: object
-  required: [coverage_type]
+  required: [mortgage_product]
   properties:
-    coverage_type:
+    mortgage_product:
       type: string
-      enum: [building_only, contents_only, both]
-    building_coverage:
-      type: number
-    contents_coverage:
+      enum: [fixed, adjustable, interest_only]
+    credit_score:
+      type: integer
+    interest_rate:
       type: number
   if:
     properties:
-      coverage_type:
-        enum: [building_only, both]
-    required: [coverage_type]
+      mortgage_product:
+        enum: [fixed, adjustable]
+    required: [mortgage_product]
   then:
-    required: [building_coverage]
+    required: [credit_score]
   if:
     properties:
-      coverage_type:
-        enum: [contents_only, both]
-    required: [coverage_type]
+      mortgage_product:
+        enum: [adjustable, interest_only]
+    required: [mortgage_product]
   then:
-    required: [contents_coverage]
+    required: [interest_rate]
 ```
 
 **Arrays with constraints —** structured lists with size bounds, uniqueness, and item schema:
 
 ```yaml
-ClaimHistory:
+QuoteHistory:
   type: object
   properties:
-    prior_claims:
+    prior_quotes:
       type: array
       minItems: 0
       maxItems: 50
       uniqueItems: true
       items:
-        $ref: "#/components/schemas/PriorClaim"
+        $ref: "#/components/schemas/PriorQuote"
   additionalProperties: false       # reject unknown fields
 ```
 
@@ -262,11 +259,11 @@ ClaimHistory:
 
 | Pattern | Use Case |
 |---------|----------|
-| `oneOf` + `discriminator` | Entity subtype selection (fire claim vs water claim) |
+| `oneOf` + `discriminator` | Entity subtype selection (rate check vs pre-approval vs refinance) |
 | `allOf` | Extend a base entity with derived fields |
-| `if`/`then`/`else` | Conditional required fields (only ask contents_coverage when coverage_type is `both`) |
-| `minItems`/`maxItems`/`uniqueItems` | Bounded lists (max 50 claims, no duplicates) |
-| `multipleOf` | Numeric step constraint (coverage in $100 increments) |
+| `if`/`then`/`else` | Conditional required fields (only ask interest_rate when mortgage_product is `adjustable`) |
+| `minItems`/`maxItems`/`uniqueItems` | Bounded lists (max 50 prior quotes, no duplicates) |
+| `multipleOf` | Numeric step constraint (loan amount in $1000 increments) |
 | `additionalProperties: false` | Strict schema — reject unrecognized LLM output fields |
 
 ---
@@ -288,12 +285,12 @@ Framework-specific behavior that JSON Schema does not cover is added via `x-` pr
 
 ```yaml
 # OpenAPI Schema Object with framework extensions
-property_type:
+loan_purpose:
   type: string
-  enum: [apartment, house, villa]
-  description: "Type of property being insured"
+  enum: [purchase, refinance, cash_out]
+  description: "Purpose of the mortgage"
   x-fallback:                         # Framework: deterministic extraction fallback
-    keywords: [apartment, house, villa, condo, flat]
+    keywords: [purchase, refinance, cash_out, home_equity, new_home]
     regex: null
     priority: llm_wins
   x-transform:                        # Framework: type coercion pipeline
@@ -302,11 +299,11 @@ property_type:
     - op: lookup
       config:
         mapping:
-          condo: apartment
-          flat: apartment
+          home_equity: refinance
+          new_home: purchase
   x-examples:                         # Framework: few-shot examples for LLM prompt
-    - "I live in a house"
-    - "3-bedroom apartment"
+    - "I want to buy a new house"
+    - "Looking to refinance my mortgage"
 ```
 
 | Extension | Purpose |
@@ -320,44 +317,44 @@ All other validation (type checking, enum matching, pattern regex, length/range 
 The framework auto-generates ExtractionRule, ValidationRule, and TransformRule from each field. For example, given:
 
 ```yaml
-property_type:
+loan_purpose:
   type: string
-  enum: [apartment, house, villa]
-  description: "Type of property"
+  enum: [purchase, refinance, cash_out]
+  description: "Purpose of the mortgage"
   x-fallback:
-    keywords: [apartment, house, villa, condo, flat]
+    keywords: [purchase, refinance, cash_out, home_equity, new_home]
   x-transform:
     - op: normalize
       config: { to: lowercase }
     - op: lookup
       config:
         mapping:
-          condo: apartment
-          flat: apartment
+          home_equity: refinance
+          new_home: purchase
 ```
 
 The framework produces:
 
 ```
 ExtractionRule {
-  field: "property_type"
+  field: "loan_purpose"
   type: "string"
-  description: "Type of property (apartment, house, villa)"
-  fallback_keywords: ["apartment", "house", "villa", "condo", "flat"]
+  description: "Purpose of the mortgage (purchase, refinance, cash_out)"
+  fallback_keywords: ["purchase", "refinance", "cash_out", "home_equity", "new_home"]
 }
 
 ValidationRule {
-  field: "property_type"
+  field: "loan_purpose"
   type: "string"
   required: true
-  enum: ["apartment", "house", "villa"]
+  enum: ["purchase", "refinance", "cash_out"]
 }
 
 TransformRule {
-  field: "property_type"
+  field: "loan_purpose"
   rules: [
     { op: "normalize", config: { to: "lowercase" } },
-    { op: "lookup", config: { mapping: { condo: "apartment", flat: "apartment" } } }
+    { op: "lookup", config: { mapping: { home_equity: "refinance", new_home: "purchase" } } }
   ]
 }
 ```
@@ -370,7 +367,7 @@ TransformRule {
 
 ```
 StateDef {
-  name:         string    // state name (e.g., "collect_property_info")
+  name:         string    // state name (e.g., "collect_lead_purpose")
   description:  string    // human-readable description of what this state expects
   entity:       string    // which entity this state extracts (references a schema name under components/schemas/)
   state_hint:   string    // disambiguation hint injected into LLM extraction prompt
@@ -386,42 +383,42 @@ Each state binds to exactly one entity (an OpenAPI Schema Object). The framework
 
 ```yaml
 states:
-  collect_property_info:
-    description: "Collect property details from the user"
-    entity: $ref: "#/components/schemas/PropertyInfo"
+  collect_lead_purpose:
+    description: "Collect lead details from the user"
+    entity: $ref: "#/components/schemas/Lead"
     state_hint: >
-      The user is providing property information for a home insurance quote.
-      Address may include street, city, province, postal code.
-      Building age is in years. "Brand new" or "newly built" means age 0.
+      The user is providing lead information for a mortgage application.
+      Address may include street, city, state, postal code.
+      Loan amount is in USD. "A little under a million" means ~950000.
     x-state-bindings:                # per-state extraction scope (see §3)
-      property_type: {}
+      loan_purpose: {}
       address: {}
-      building_age: {}
-      floor_area: {}
-      construction_type: {}
+      loan_amount: {}
+      property_value: {}
+      property_type: {}
 
-  collect_coverage_needs:
-    description: "Collect coverage preferences"
-    entity: $ref: "#/components/schemas/CoverageInfo"
+  collect_financial_profile:
+    description: "Collect borrower financial profile"
+    entity: $ref: "#/components/schemas/Borrower"
     state_hint: >
-      The user is choosing coverage type and amount.
-      Deductible options: low (500 CNY), standard (2000 CNY), high (5000 CNY).
+      The user is providing financial information for a mortgage lead.
+      Credit score tiers: excellent (750+), good (700-749), fair (650-699), poor (<650).
     x-state-bindings:
-      coverage_type: {}
-      coverage_amount: {}
+      mortgage_product: {}
+      interest_rate: {}
 
-  file_claim:
-    description: "File a new claim"
-    entity: $ref: "#/components/schemas/ClaimDetails"
+  submit_lead:
+    description: "Submit a new mortgage lead"
+    entity: $ref: "#/components/schemas/QuoteDetails"
     state_hint: >
-      The user is reporting an incident for a claim.
-      Incident type must be one of: fire, water_damage, theft, natural_disaster, other.
-      Date should be in YYYY-MM-DD format.
+      The user is submitting a mortgage lead for distribution.
+      Quote type must be one of: rate_check, pre_approval, full_underwrite.
+      Desired close date should be in YYYY-MM-DD format.
     x-state-bindings:
-      claim_type: {}
-      damage_description: {}
-      incident_date: {}
-      incident_location: {}
+      quote_type: {}
+      rate_criteria: {}
+      desired_close_date: {}
+      property_use: {}
 ```
 
 ### 4.4 State Name → agentState.phase Mapping
@@ -431,11 +428,11 @@ At runtime, the framework maps each `StateDef.name` to the `agentState.phase` fi
 ```
 # Domain model state definition
 states:
-  collect_property_info:
+  collect_lead_purpose:
     ...
 
 # Runtime behavior
-agentState.phase = "collect_property_info"
+agentState.phase = "collect_lead_purpose"
 ```
 
 The `agentState.phase` value is used by:
@@ -456,25 +453,25 @@ The Intent Model defines the contract between **what the user says** (Layer 1 �
 
 ```yaml
 intents:
-  get_home_insurance_quote:
-    name: get_home_insurance_quote
-    description: "User wants a home insurance quote"
+  submit_mortgage_lead:
+    name: submit_mortgage_lead
+    description: "User wants to submit a mortgage lead"
     confidence_threshold: 0.7
-    entry_state: collect_property_info
+    entry_state: collect_lead_purpose
     examples:
-      - "I need home insurance for my house"
-      - "How much is home insurance?"
-      - "Get me a quote for my apartment"
+      - "I want to apply for a mortgage"
+      - "How much can I borrow?"
+      - "Get me a rate quote for my home"
     fallback_intent: general_inquiry
 
-  file_insurance_claim:
-    name: file_insurance_claim
-    description: "User wants to file an insurance claim"
+  check_rates:
+    name: check_rates
+    description: "User wants to check mortgage rates"
     confidence_threshold: 0.8
-    entry_state: file_claim
+    entry_state: submit_lead
     examples:
-      - "My house flooded, I need to file a claim"
-      - "There was a fire at my property"
+      - "I want to see current mortgage rates"
+      - "What's the best rate you can offer?"
     fallback_intent: general_inquiry
 
   general_inquiry:
@@ -498,17 +495,17 @@ intents:
 The intent model is the **deterministic entry point** into the state machine:
 
 ```
-User Input: "I need home insurance"
+User Input: "I want to apply for a mortgage"
     │
     ▼
 Intent Classifier (Layer 1)
-    │  confidence: 0.92 → get_home_insurance_quote
+    │  confidence: 0.92 → submit_mortgage_lead
     │
     ▼
-Route to entry_state: collect_property_info
+Route to entry_state: collect_lead_purpose
     │
     ▼
-State Machine starts executing transitions from collect_property_info
+State Machine starts executing transitions from collect_lead_purpose
 ```
 
 The framework uses `entry_state` to set `agentState.phase` on first turn, then transitions take over. If the classifier returns an intent below `confidence_threshold`, the framework routes to the `fallback_intent`'s `entry_state` instead.
@@ -518,8 +515,8 @@ The framework uses `entry_state` to set `agentState.phase` on first turn, then t
 A single conversation may match multiple intents over its lifetime:
 
 ```
-Turn 1: "I need insurance"     → intent: get_home_insurance_quote  → state: collect_property_info
-Turn 2: "Also, I had a fire"   → intent: file_insurance_claim      → state: file_claim (re-routes)
+Turn 1: "I want a mortgage"       → intent: submit_mortgage_lead  → state: collect_lead_purpose
+Turn 2: "Also, I want to check rates"  → intent: check_rates      → state: submit_lead (re-routes)
 ```
 
 When a new intent arrives mid-conversation, the framework evaluates whether to **re-route** (switch to new entry_state) or **continue** (stay in current state). The default behavior is to re-route unless the current state's transition rules explicitly prevent it.
@@ -544,8 +541,8 @@ TransitionDef {
 
 ### 6.2 Transition Semantics
 
-- **Self-loop**: `from: collect_property_info, to: collect_property_info, guard: "context_incomplete"` — stay in current state until all required fields are filled
-- **Advance**: `from: collect_property_info, to: assess_risk, guard: "property_type != null AND address != null AND building_age != null"` — move forward when entity fields are complete
+- **Self-loop**: `from: collect_lead_purpose, to: collect_lead_purpose, guard: "context_incomplete"` — stay in current state until all required fields are filled
+- **Advance**: `from: collect_lead_purpose, to: assign_lead, guard: "loan_purpose != null AND loan_amount != null AND state != null"` — move forward when entity fields are complete
 - **Conditional branch**: multiple transitions from the same state with non-overlapping guards decide the next state
 
 ### 6.3 Conflict Resolution
@@ -560,35 +557,35 @@ When multiple transitions from the same state have guards that could both be tru
 
 ```yaml
 transitions:
-  # Quote flow
-  - from: collect_property_info
-    to: collect_coverage_needs
-    guard: "property_type != null AND address != null AND building_age != null"
-    label: "property_info_complete"
+  # Lead flow
+  - from: collect_lead_purpose
+    to: collect_financial_profile
+    guard: "loan_purpose != null AND loan_amount != null AND state != null"
+    label: "lead_purpose_complete"
     priority: 10
 
-  - from: collect_property_info
-    to: collect_property_info
+  - from: collect_lead_purpose
+    to: collect_lead_purpose
     guard: "context_incomplete"
     label: "still_collecting"
     priority: 5
 
-  - from: collect_coverage_needs
-    to: assess_risk
-    guard: "coverage_type != null AND building_coverage != null"
-    label: "coverage_needs_complete"
+  - from: collect_financial_profile
+    to: assign_lead
+    guard: "mortgage_product != null AND interest_rate != null"
+    label: "financial_profile_complete"
 
-  - from: collect_coverage_needs
-    to: collect_coverage_needs
+  - from: collect_financial_profile
+    to: collect_financial_profile
     guard: "context_incomplete"
 
-  # Claim flow
-  - from: file_claim
-    to: validate_claim
-    guard: "incident_type != null AND incident_date != null AND estimated_loss != null"
+  # Quote flow
+  - from: submit_lead
+    to: validate_lead
+    guard: "quote_type != null AND desired_close_date != null AND estimated_loan_value != null"
 
-  - from: file_claim
-    to: file_claim
+  - from: submit_lead
+    to: submit_lead
     guard: "context_incomplete"
 ```
 
@@ -604,7 +601,7 @@ The transition target name `errorNode` is reserved for error handling. Behavior:
 ```yaml
 # NO need to declare this in transitions:
 # transitions:
-#   - from: collect_property_info
+#   - from: collect_lead_purpose
 #     to: errorNode       # ← NOT needed; errorNode is always reachable
 ```
 
@@ -645,26 +642,26 @@ Framework resolves to concrete ExtractionNode / ValidateNode / TransformNode ins
 ### 7.3 Example: Referencing a Domain Model
 
 ```yaml
-# workflow_home_insurance_quote.yaml
-workflow: home_insurance_quote
-domain_model: home-insurance        # loads docs/domain-models/home-insurance.yaml
+# workflow_mortgage_lead_submission.yaml
+workflow: mortgage_lead_submission
+domain_model: mortgage-lead        # loads docs/domain-models/mortgage-lead.yaml
 
 nodes:
-  collect_property_info_extract:
-    entity: property_info
+  collect_lead_purpose_extract:
+    entity: lead
     extract_strategy: hybrid
     validate_strategy: durable_rules
     transform_strategy: hybrid
     context_window_size: 6
     max_transform_attempts: 2
-    on_transform_failure: ask_missing_property_info
+    on_transform_failure: ask_missing_lead_info
 
-  collect_coverage_needs_extract:
-    entity: coverage_needs
+  collect_financial_profile_extract:
+    entity: borrower
     extract_strategy: hybrid
     validate_strategy: durable_rules
     transform_strategy: hybrid
-    on_transform_failure: ask_missing_coverage
+    on_transform_failure: ask_missing_financial
 ```
 
 ---
@@ -674,10 +671,10 @@ nodes:
 A domain model is globally registered. Multiple workflows can reference it, with different strategy configurations.
 
 ```
-domain-models/home-insurance.yaml
-    ├── workflow_home_insurance_quote.yaml     (extract_strategy: hybrid)
-    ├── workflow_home_insurance_refinance.yaml  (extract_strategy: llm_primary)
-    └── workflow_home_insurance_renewal.yaml    (extract_strategy: deterministic)
+domain-models/mortgage-lead.yaml
+    ├── workflow_mortgage_lead_submission.yaml  (extract_strategy: hybrid)
+    ├── workflow_mortgage_lead_refinance.yaml   (extract_strategy: llm_primary)
+    └── workflow_mortgage_lead_renewal.yaml     (extract_strategy: deterministic)
 ```
 
 ### 8.1 Versioning
@@ -685,7 +682,7 @@ domain-models/home-insurance.yaml
 Domain models use semantic versioning. Workflows pin to a version:
 
 ```yaml
-domain_model: home-insurance@1.2.0
+domain_model: mortgage-lead@1.2.0
 ```
 
 Breaking changes to entity schemas (field removal, type change) require a major version bump.
@@ -695,7 +692,7 @@ Breaking changes to entity schemas (field removal, type change) require a major 
 When two domain models define entities with the same name, the framework disambiguates by domain prefix:
 
 ```yaml
-entity: home_insurance.property_info
+entity: mortgage_lead.lead
 ```
 
 ---
@@ -748,8 +745,8 @@ AgentState:
       description: >
         Maps each field name to its target entity name.
         Derived from x-state-bindings at domain model load time.
-        Example: { "street": "Address", "first_name": "UserInfo",
-                   "monthly_premium": "QuoteRequest" }
+        Example: { "street": "Address", "first_name": "Borrower",
+                   "monthly_payment": "LeadSubmission" }
 
     # --- Extraction tracking ---
     fieldExtractedList:
@@ -769,7 +766,7 @@ AgentState:
         Accumulated field values that passed all three stages
         (Extract → Validate → Transform). Structured per-entity:
         { "Address": { "street": "123 Main", "city": "Toronto" },
-          "UserInfo": { "first_name": "Alice" } }
+          "Borrower": { "first_name": "Alice" } }
         This IS the DomainModel entity state — only verified values live here.
 
     lastIntent:
@@ -937,42 +934,42 @@ The framework consumes these schemas to generate:
 
 ### 11.1 Cross-Entity Data
 
-When a state collects `coverage_needs` but the transition guard references a field from `property_info` (collected in a previous state), the framework evaluates the guard against the accumulated `collectedFields` across all entities. This enables guards like `"building_age > 10 AND building_coverage > 500000"`.
+When a state collects `borrower` but the transition guard references a field from `lead` (collected in a previous state), the framework evaluates the guard against the accumulated `collectedFields` across all entities. This enables guards like `"loan_amount <= 920000 AND state in licensed_states"`.
 
 ### 11.2 Dynamic Entity Selection
 
-For scenarios where the entity schema depends on a prior decision (e.g., auto vs home insurance), use two-stage domain models:
+For scenarios where the entity schema depends on a prior decision (e.g., purchase vs refinance mortgage), use two-stage domain models:
 
 ```yaml
 # Stage 1 entity
-insurance_type:
+lead_type:
   fields:
-    product_type:
+    lead_type:
       type: enum
-      values: [auto, home, life]
+      values: [purchase, refinance, cash_out]
       required: true
 
 # Stage 2 — dynamic entity binding
 states:
-  classify_product:
-    entity: insurance_type  # Stage 1
+  classify_lead:
+    entity: lead_type  # Stage 1
 
-  collect_property_details:
-    entity: property_subtype_info   # Selected only if product_type == "home"
+  collect_lead_details:
+    entity: lead   # Selected only if lead_type == "purchase"
 
-  collect_coverage_details:
-    entity: coverage_info           # Selected after property details complete
+  collect_financial_profile:
+    entity: borrower           # Selected after lead details complete
 ```
 
 The transition guard on the classify state determines which entity is used next:
 
 ```yaml
 transitions:
-  - from: classify_product
-    to: collect_property_details
-    guard: "product_type == 'home'"
-  - from: collect_property_details
-    to: collect_coverage_details
+  - from: classify_lead
+    to: collect_lead_details
+    guard: "lead_type == 'purchase'"
+  - from: collect_lead_details
+    to: collect_financial_profile
     guard: "context_complete"
 ```
 
@@ -986,7 +983,7 @@ transitions:
 | 2 | Should domain models support inheritance (e.g., `homeowner_policy extends base_policy`)? | Reuse granularity |
 | 3 | For guard expressions — how much expressiveness before we defer to rule engines? | Language complexity vs. power |
 | 4 | Should the domain model include computed fields (fields populated by code, not by user extraction)? | Entity purity |
-| 5 | Cross-workflow entity references — should an entity in `home_insurance_quote` reference an entity in `home_insurance_claims`? | Modularity |
+| 5 | Cross-workflow entity references — should an entity in `mortgage_lead_submission` reference an entity in `mortgage_lead_claims`? | Modularity |
 | 6 | Migration strategy when a domain model version changes while conversations are in-flight? | Deployment safety |
 
 ---
@@ -996,5 +993,5 @@ transitions:
 - [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — parent architecture document
 - [Extraction Layer Design](./2026-06-17-extraction-layer-design.md) — Extract/Validate/Transform interfaces
 - [State Machine Design](./2026-06-16-state-machine-design.md) — guard expression base, intent+state resolution
-- [Home Insurance Workflow](../../examples/home-insurance/workflow.yaml) — reference domain model instantiation
+- [Mortgage Lead Workflow](../../examples/mortgage-lead/workflow.yaml) — reference domain model instantiation
 - zelkim/langgraph-insurance-chatbot — two-stage dynamic entity selection (auto vs home vs life)

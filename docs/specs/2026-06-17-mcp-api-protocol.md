@@ -146,7 +146,7 @@ tool:
     properties:
       workflow_id:
         type: string
-        description: "The workflow to start (e.g., 'home_insurance_quote')"
+        description: "The workflow to start (e.g., 'mortgage_lead_submission')"
       user_id:
         type: string
         description: "The user initiating the conversation"
@@ -308,7 +308,7 @@ tool:
         enum: [created, active, paused, completed, abandoned, timeout]
       current_phase:
         type: string
-        description: "Current workflow phase (e.g., 'collect_property_info')"
+        description: "Current workflow phase (e.g., 'collect_lead_purpose')"
       turn_count:
         type: integer
       created_at:
@@ -371,7 +371,7 @@ mcp:
       naming: snake_case
     manual_tools:                        # only relevant if discovery: manual
       - name: create_conversation
-        workflow: home_insurance_quote
+        workflow: mortgage_lead_submission
         node: entry_point
 
   resources:

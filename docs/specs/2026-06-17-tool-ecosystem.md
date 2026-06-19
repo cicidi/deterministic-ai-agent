@@ -162,7 +162,7 @@ langgraph dev --config langgraph.json
 {
   "dependencies": ["langchain_openai", "./deterministic_workflow"],
   "graphs": {
-    "home_insurance_quote": "./deterministic_workflow/graph.py:build_graph"
+    "mortgage_lead_submission": "./deterministic_workflow/graph.py:build_graph"
   },
   "env": "./.env"
 }
@@ -173,8 +173,8 @@ The `build_graph` entry point loads config from YAML and compiles the LangGraph 
 ```yaml
 # deterministic_workflow/config.yaml — engine bootstrap config
 engine:
-  domain_model: "domain-models/home-insurance.yaml"
-  workflow_config: "workflows/home_insurance_quote.yaml"
+  domain_model: "domain-models/mortgage-lead.yaml"
+  workflow_config: "workflows/mortgage_lead_submission.yaml"
   checkpoint_backend: "postgresql://localhost:5432/langgraph"
   rule_engine: durable_rules
 
@@ -215,7 +215,7 @@ Cloud-based IDE for debugging, testing, and monitoring LangGraph agents. Feature
 langsmith:
   api_key: "${LANGSMITH_API_KEY}"
   tracing: true
-  project: "home-insurance-quote"
+  project: "mortgage-lead-quote"
   # Framework auto-traces all LLM calls and graph execution.
   # Every conversation.send() creates a trace in LangSmith Studio.
 ```
@@ -231,13 +231,13 @@ evaluators:
   - response_pii_leakage
   - decision_correctness
 
-dataset: "home-insurance-eval-dataset"
+dataset: "mortgage-lead-eval-dataset"
 
 experiment:
-  name: "home-insurance-v1.0"
-  description: "Baseline eval for home insurance quote workflow"
+  name: "mortgage-lead-v1.0"
+  description: "Baseline eval for mortgage lead submission workflow"
   metadata:
-    domain: home_insurance
+    domain: mortgage_lead
     version: "1.0.0"
 
 # Run via: langsmith eval run --config langsmith/eval_config.yaml
@@ -262,7 +262,7 @@ Three pluggable rule engines for validation and decision nodes:
 ```yaml
 # workflow.yaml
 nodes:
-  validate_property_info:
+  validate_lead_purpose:
     rule_engine: durable_rules    # per-node override
 
 # framework.yaml (global default)
@@ -346,19 +346,19 @@ g, admin, operator
 
 # Tool access policies
 p, admin, *, *                          # admin: full access
-p, operator, claims_gateway_api, write
-p, operator, calculate_premium_api, read
+p, operator, lead_distribution_engine, write
+p, operator, calculate_rate_api, read
 p, operator, vector_search_mcp, read
-p, analyst, policy_lookup_api, read
-p, analyst, claim_history_api, read
+p, analyst, rate_lookup_api, read
+p, analyst, lead_history_api, read
 p, user, vector_search_mcp, read
-p, user, calculate_premium_api, read
+p, user, calculate_rate_api, read
 
 # Transition access policies
-p, *, collect_property_info, transition
-p, *, collect_coverage_needs, transition
-p, admin, claims_processing, transition
-p, operator, claims_processing, transition
+p, *, collect_lead_purpose, transition
+p, *, collect_financial_profile, transition
+p, admin, lead_processing, transition
+p, operator, lead_processing, transition
 ```
 
 ### 6.6 Framework Integration
@@ -372,13 +372,13 @@ permission:
 
 # Per-workflow override
 workflows:
-  home_insurance_quote:
+  mortgage_lead_submission:
     permission:
       engine: native          # simple allowlist, no casbin needed
-  enterprise_claims:
+  enterprise_lead_distribution:
     permission:
       engine: pycasbin        # complex role hierarchy
-      model: "config/casbin/claims_model.conf"
+      model: "config/casbin/lead_distribution_model.conf"
 ```
 
 ### 6.7 Enforcement Flow
@@ -422,13 +422,13 @@ mcp_servers:
     command: "npx @anthropic/mcp-server-knowledge-base"
     args: ["--db-path", "./kb.sqlite"]
     tools: [search_documents, get_document]
-  claims_gateway:
-    command: "python mcp_servers/claims_server.py"
+  lead_distribution_engine:
+    command: "python mcp_servers/lead_distribution_server.py"
     env:
-      API_KEY: "${CLAIMS_API_KEY}"
-    tools: [claim_submit, claim_status]
+      API_KEY: "${LEAD_DISTRIBUTION_API_KEY}"
+    tools: [lead_submission, lead_status]
   # Framework auto-discovers tools at startup.
-  # Available tools: vector_search, claim_submit, claim_status, ...
+  # Available tools: vector_search, lead_submission, lead_status, ...
 ```
 
 ### 7.2 Tool Registration
@@ -440,18 +440,18 @@ Register tools via YAML configuration. Type values follow the [HLD §4.4](./2026
 ```yaml
 # framework.yaml
 tools:
-  - name: calculate_premium_api
+  - name: calculate_rate_api
     type: api
     access_level: read
     api:
       method: POST
-      url: "/api/v1/premium"
+      url: "/api/v1/rate"
       timeout_ms: 5000
       request_body_schema:
         type: object
         properties:
-          coverage_amount: { type: number }
-          property_type: { type: string }
+          loan_amount: { type: number }
+          loan_purpose: { type: string }
 
   - name: vector_search_mcp
     type: mcp
@@ -460,7 +460,7 @@ tools:
       server: knowledge_base
       tool_name: search_documents
 
-  - name: run_risk_model_cmd
+  - name: run_lead_scoring_model_cmd
     type: command
     access_level: read
     command:
@@ -516,7 +516,7 @@ When the framework is used with Claude Desktop, MCP tools are auto-exposed:
       "command": "python",
       "args": ["-m", "deterministic_workflow.mcp_server"],
       "env": {
-        "WORKFLOW_CONFIG": "workflows/home_insurance_quote.yaml"
+        "WORKFLOW_CONFIG": "workflows/mortgage_lead_submission.yaml"
       }
     }
   }
@@ -535,8 +535,8 @@ tool_failure_handling:
   max_retries: 2
 
 nodes:
-  calculate_premium:
-    tools: [calculate_premium_api, run_risk_model_cmd]
+  calculate_rate:
+    tools: [calculate_rate_api, run_lead_scoring_model_cmd]
     on_tool_failure:
       route_to: errorNode       # overrides default_error_node
       fallback_on_timeout: true     # use cached/default value on timeout
@@ -639,11 +639,11 @@ A2A tools participate in the existing permission model:
 ```yaml
 # A2A tool with permission configuration
 tools:
-  - name: delegate_claim_to_agent
+  - name: delegate_lead_to_agent
     type: a2a
-    access_level: dangerous_operation_write    # claims processing
+    access_level: dangerous_operation_write    # lead distribution
     a2a:
-      agent_id: claims_processor
+      agent_id: lead_distribution_agent
       mode: sync
       timeout_ms: 15000
       input_mapping:
@@ -658,9 +658,9 @@ tools:
 nodes:
   process_quote:
     executor: llm
-    tool_allowlist: [calculate_premium_api, delegate_claim_to_agent]
+    tool_allowlist: [calculate_rate_api, delegate_lead_to_agent]
     permission:
-      allowed_tools: [calculate_premium_api, delegate_claim_to_agent]
+      allowed_tools: [calculate_rate_api, delegate_lead_to_agent]
 ```
 
 #### 7.5.5 A2A Tool Error Handling
@@ -673,7 +673,7 @@ tools:
   - name: delegate_verification_to_agent
     type: a2a
     a2a:
-      agent_id: property_verification
+      agent_id: lead_verification
       mode: sync
       timeout_ms: 30000
     retry:
@@ -707,15 +707,15 @@ tools:
 When a downstream agent cannot complete a task in a single response, the calling node (typically an LLM node) can engage in a multi-turn conversation with the agent. The LLM and the downstream agent exchange messages within a bounded turn budget — either completing the task or failing explicitly.
 
 ```
-Calling Node (LLM)                           Downstream Agent (e.g., claims_processor)
+Calling Node (LLM)                           Downstream Agent (e.g., lead_distribution_agent)
     │                                              │
     ├── Turn 1: A2A Tool Call ──────────────────→ │
-    │    delegate_claim(amount=500, method=ACH)  │   "Need more info: which account?"
+    │    delegate_lead(amount=500000, method=fixed) │   "Need more info: which loan type?"
     │←── A2A Response (status: incomplete) ──────┤
     │    { needs_clarification: "account_type" }   │
     │                                              │
     ├── Turn 2: A2A Tool Call (with context) ────→│
-    │    delegate_claim(account_type="checking") │   "Processing claim..."
+    │    delegate_lead(loan_type="fixed") │   "Processing lead..."
     │←── A2A Response (status: completed) ────────┤
     │    { transaction_id: "tx_123", status: "ok" }│
     │                                              │
@@ -737,11 +737,11 @@ Calling Node (LLM)                           Downstream Agent (e.g., claims_proc
 
 ```yaml
 tools:
-  - name: delegate_claim_to_agent
+  - name: delegate_lead_to_agent
     type: a2a
     access_level: dangerous_operation_write
     a2a:
-      agent_id: claims_processor
+      agent_id: lead_distribution_agent
       mode: sync
       timeout_ms: 15000
       max_turns: 5                          # max conversational turns
@@ -793,9 +793,9 @@ nodes:
       clarification, decide whether to provide more context or escalate to
       the user. You have up to 5 turns per agent call.
     tool_allowlist:
-      - delegate_claim_to_agent       # a2a tool with max_turns: 5
+      - delegate_lead_to_agent       # a2a tool with max_turns: 5
       - delegate_verification_to_agent  # a2a tool with max_turns: 3
-      - calculate_premium_api            # regular API
+      - calculate_rate_api            # regular API
     max_llm_tool_calls: 15               # total tool calls across all agents
 ```
 
@@ -1065,10 +1065,10 @@ Configure FSM visualization via YAML and export to Graphviz:
 ```yaml
 # framework.yaml
 fsm:
-  source: "domain-models/home-insurance.yaml"
+  source: "domain-models/mortgage-lead.yaml"
   visualization:
     format: png
-    output: "docs/diagrams/home_insurance_fsm.png"
+    output: "docs/diagrams/mortgage_lead_fsm.png"
     engine: dot                    # Graphviz layout engine
     render_on_build: true          # auto-export on graph compilation
 
@@ -1143,10 +1143,10 @@ llm:
 
   # Per-node override
   nodes:
-    extract_property_info:
+    extract_lead_purpose:
       provider: anthropic
       temperature: 0
-    generate_quote_response:
+    distribute_lead_response:
       provider: openai
       temperature: 0.3
 ```
@@ -1160,8 +1160,8 @@ Full-stack configuration: from YAML → LangFlow → LangGraph → LangSmith —
 ```yaml
 # framework.yaml — complete integration config
 engine:
-  domain_model: "domain-models/home-insurance.yaml"
-  workflow_config: "workflows/home_insurance_quote.yaml"
+  domain_model: "domain-models/mortgage-lead.yaml"
+  workflow_config: "workflows/mortgage_lead_submission.yaml"
   rule_engine: durable_rules
   checkpoint_backend: "postgresql://localhost:5432/langgraph"
 
@@ -1174,25 +1174,25 @@ llm:
 langsmith:
   api_key: "${LANGSMITH_API_KEY}"
   tracing: true
-  project: "home-insurance-quote"
+  project: "mortgage-lead-quote"
 
 mcp_servers:
   knowledge_base:
     command: "npx @anthropic/mcp-server-knowledge-base"
     args: ["--db-path", "./kb.sqlite"]
-  claims_gateway:
-    command: "python mcp_servers/claims_server.py"
-    env: { API_KEY: "${PAYMENT_API_KEY}" }
+  lead_distribution_engine:
+    command: "python mcp_servers/lead_distribution_server.py"
+    env: { API_KEY: "${LEAD_DISTRIBUTION_API_KEY}" }
 
 tools:
-  - name: calculate_premium_api
+  - name: calculate_rate_api
     type: api
     access_level: read
-    api: { method: POST, url: "/api/v1/premium", timeout_ms: 5000 }
-  - name: run_risk_model_cmd
+    api: { method: POST, url: "/api/v1/rate", timeout_ms: 5000 }
+  - name: run_lead_scoring_model_cmd
     type: command
     access_level: read
-    command: { run: "python /opt/models/risk.py", timeout_ms: 30000, sandbox: true }
+    command: { run: "python /opt/models/lead_scoring.py", timeout_ms: 30000, sandbox: true }
   - name: delegate_faq_to_agent
     type: a2a
     access_level: read
@@ -1221,8 +1221,8 @@ tool_failure_handling:
   max_retries: 2
 
 fsm:
-  source: "domain-models/home-insurance.yaml"
-  visualization: { format: png, output: "docs/diagrams/home_insurance_fsm.png" }
+  source: "domain-models/mortgage-lead.yaml"
+  visualization: { format: png, output: "docs/diagrams/mortgage_lead_fsm.png" }
 
 pii:
   engine: presidio
@@ -1230,7 +1230,7 @@ pii:
   masking_strategy: partial_mask
 
 export:
-  langflow: "langflow/workflows/home_insurance.json"
+  langflow: "langflow/workflows/mortgage_lead.json"
   langgraph: "langgraph.json"
 ```
 
@@ -1273,7 +1273,7 @@ export:
 
 1. **Should LangFlow components be auto-generated from the domain model YAML, or require manual wiring?** Auto-generation simplifies adoption but risks over-constraining the visual editor experience.
 
-2. **What is the fault-tolerance boundary for MCP tool failures?** When an MCP server (e.g., claims gateway) is unreachable, should the workflow queue the request for retry, fall back to a cached response, or escalate immediately?
+2. **What is the fault-tolerance boundary for MCP tool failures?** When an MCP server (e.g., lead distribution engine) is unreachable, should the workflow queue the request for retry, fall back to a cached response, or escalate immediately?
 
 3. **How do we version and rollback eval datasets in LangSmith?** Eval results may drift as domain models evolve — do we pin eval datasets to workflow version tags?
 

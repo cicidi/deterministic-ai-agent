@@ -16,7 +16,7 @@
 
 ## 1. Role
 
-After Layer 1 classifies intent and Layer 2 decides the next state, **Layer 3 delegates execution to a specialized agent** for specific intent categories. Write/transactional operations (quote, claim, policy changes) are handled deterministically by the state machine — not delegated to an agent.
+After Layer 1 classifies intent and Layer 2 decides the next state, **Layer 3 delegates execution to a specialized agent** for specific intent categories. Write/transactional operations (lead submission, rate check, profile changes) are handled deterministically by the state machine — not delegated to an agent.
 
 ```
 Intent Classification → State Machine → Agent Dispatch
@@ -60,7 +60,7 @@ class ReadOnlyAgent(Protocol):
         2. ask_question   — open-ended questions answered via RAG retrieval
 
     NOT assigned to this agent (deterministic, handled by state machine):
-        - help, repeat, check_coverage, ask_about_claim_status → deterministic lookups
+        - help, repeat, check_rates, ask_about_lead_status → deterministic lookups
     """
 
     Backend examples:
@@ -180,7 +180,7 @@ def dispatch_agent(intent: str, intent_defs: dict) -> type[Protocol]:
     return agent_map.get(intent)
 ```
 
-**Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `provide_information`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`, and all write intents like `get_quote`, `file_claim`, `renew_policy`, `update_policy`, `cancel_policy`) are handled directly by the state machine — they are conversation control, slot-filling, or deterministic write operations.
+**Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `provide_information`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`, and all write intents like `submit_lead`, `check_rates`, `renew_policy`, `update_policy`, `cancel_policy`) are handled directly by the state machine — they are conversation control, slot-filling, or deterministic write operations.
 
 ---
 

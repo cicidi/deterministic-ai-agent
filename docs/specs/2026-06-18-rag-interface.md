@@ -104,7 +104,7 @@ class DocumentStore(Protocol):
     def filter_documents(self, filters: Optional[dict[str, Any]] = None) -> list[Document]:
         """Return documents matching metadata filters.
 
-        filters: e.g. {"field": "product", "operator": "==", "value": "home_insurance"}
+        filters: e.g. {"field": "product", "operator": "==", "value": "mortgage_lead"}
         """
         ...
 

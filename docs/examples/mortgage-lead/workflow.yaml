@@ -1,0 +1,202 @@
+workflow: mortgage_lead_submission
+version: "1.0"
+description: >
+  Mortgage lead submission workflow. Borrower submits lead → system validates →
+  extracts entity data → collects missing fields → submits to distribution.
+  Based on mfangdai (mRateQuote) production system.
+
+states:
+  # ============================================================
+  # Entry
+  # ============================================================
+  - name: start
+    executor: code
+    action: reset_context
+    description: "Initialize; detect borrower from session or prompt for registration"
+
+  # ============================================================
+  # Borrower Identification
+  # ============================================================
+  - name: identify_borrower
+    executor: llm
+    prompt: |
+      Identify the borrower:
+      - Check if user is already logged in (credentialId in session)
+      - If new user: collect first_name, last_name, email, phone
+      - If returning user: confirm identity
+    output_schema:
+      is_returning: bool
+      first_name: str
+      last_name: str
+      email: str
+      phone: str
+      borrower_id: str
+    transitions:
+      - to: collect_lead_purpose
+        guard: "context.is_returning or context.is_new_borrower_registered"
+
+  # ============================================================
+  # Lead Purpose
+  # ============================================================
+  - name: collect_lead_purpose
+    executor: llm
+    prompt: |
+      Determine the loan purpose. Ask:
+      - Are you buying a new home (PURCHASE) or refinancing (REFINANCE)?
+      Extract loanPurpose from user message.
+    output_schema:
+      loanPurpose: { type: string, enum: [PURCHASE, REFINANCE] }
+    transitions:
+      - to: collect_loan_amount
+
+  # ============================================================
+  # Loan Amount & Property
+  # ============================================================
+  - name: collect_loan_amount
+    executor: llm
+    prompt: |
+      Collect loan and property details:
+      - Desired loan amount (USD, min $50,000)
+      - Estimated property value
+      - Property location: state (2-letter) and zip code
+      - Property type: Single Family, Condo, Townhouse, Multi-Family, Manufactured
+      - Residence type: Primary, Second Home, Investment
+    output_schema:
+      loanAmount: { type: float, minimum: 50000 }
+      homeValue: { type: float, minimum: 50000 }
+      state: { type: string }
+      zipCode: { type: string }
+      homeDescription: { type: string }
+      residenceType: { type: string }
+    tool_allowlist: ["lookup_property_record"]
+    human_review: false
+    transitions:
+      - to: collect_purchase_details
+        guard: "context.loanPurpose == 'PURCHASE'"
+      - to: collect_refinance_details
+        guard: "context.loanPurpose == 'REFINANCE'"
+
+  # ============================================================
+  # Purchase-specific Details
+  # ============================================================
+  - name: collect_purchase_details
+    executor: llm
+    prompt: |
+      Collect purchase-specific information:
+      - First-time home buyer? (yes/no)
+      - Already have a real estate agent? (yes/no)
+      - Need agent recommendation? (yes/no)
+      - Purchase timeline: Still looking / Signed contract / In escrow / Ready to close
+    output_schema:
+      firstTimeHomeBuyer: bool
+      hasRealEstateAgent: bool
+      needRealEstateAgent: bool
+      propertyPurchaseSituation: str
+    transitions:
+      - to: collect_financial_profile
+
+  # ============================================================
+  # Refinance-specific Details
+  # ============================================================
+  - name: collect_refinance_details
+    executor: llm
+    prompt: |
+      Collect refinance-specific information:
+      - Current mortgage rate (%)
+      - Have a second mortgage / HELOC? (yes/no)
+      - Second loan balance (if applicable)
+      - Cash-out amount desired (if any)
+      - Current mortgage product type
+    output_schema:
+      currentMortgageRate: float
+      haveSecondMortgage: bool
+      secondLoanAmount: float
+      additionalLoanAmount: float
+      currentMortgageProduct: str
+    transitions:
+      - to: collect_financial_profile
+
+  # ============================================================
+  # Financial Profile
+  # ============================================================
+  - name: collect_financial_profile
+    executor: llm
+    prompt: |
+      Collect financial profile:
+      - Credit score range: Excellent (740+) / Good (700-739) / Fair (640-699) / Poor (below 640) / Unknown
+      - Employment status: Employed / Self-Employed / Retired / Unemployed / Other
+      - Annual household income: <$50k / $50k-$100k / $100k-$200k / $200k-$400k / >$400k
+    output_schema:
+      creditScoreRange: { type: string, enum: [EXCELLENT, GOOD, FAIR, POOR, UNKNOWN] }
+      employmentStatus: { type: string, enum: [EMPLOYED, SELF_EMPLOYED, RETIRED, UNEMPLOYED, OTHER] }
+      annualHouseholdIncome: { type: string }
+    transitions:
+      - to: collect_preferences
+
+  # ============================================================
+  # Preferences & Final
+  # ============================================================
+  - name: collect_preferences
+    executor: llm
+    prompt: |
+      Collect preferences:
+      - Preferred mortgage products: 30Yr Fixed, 20Yr Fixed, 15Yr Fixed, 10Yr Fixed, 7Yr ARM, 5Yr ARM, 3Yr ARM
+      - Any additional message or special requirements
+      - Referral code (if any)
+      - Preferred language
+    output_schema:
+      mortgageProducts: str
+      message: str
+      referenceCode: str
+      languages: str
+    transitions:
+      - to: confirm_submission
+
+  # ============================================================
+  # Confirm & Submit
+  # ============================================================
+  - name: confirm_submission
+    executor: llm
+    prompt: |
+      Present a summary of the lead to the borrower for confirmation:
+      - Loan purpose, amount, property details
+      - Financial profile
+      - Preferences
+      Ask: "Does everything look correct? Ready to submit?"
+    output_schema:
+      confirmed: bool
+      corrections: str
+    transitions:
+      - to: submit_lead
+        guard: "context.confirmed == true"
+      - to: collect_lead_purpose
+        guard: "context.confirmed == false"
+
+  # ============================================================
+  # Submit
+  # ============================================================
+  - name: submit_lead
+    executor: code
+    action: create_lead
+    description: >
+      Create Lead entity in database. Trigger push-model distribution
+      (LeadDistributor → check eligibility → LeadAssignment → Quote flow).
+      Send lead_id to borrower. Transition to monitoring state.
+    transitions:
+      - to: lead_submitted
+
+  # ============================================================
+  # Post-Submission
+  # ============================================================
+  - name: lead_submitted
+    executor: llm
+    prompt: |
+      Lead has been submitted. Inform borrower:
+      - Lead ID for reference
+      - Next steps: loan officers will review and provide quotes
+      - Typical response time
+      - How to check status
+      Offer: "Would you like me to notify you when quotes arrive?"
+    output_schema:
+      response_text: str
+      lead_id: str

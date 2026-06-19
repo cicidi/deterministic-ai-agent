@@ -117,7 +117,7 @@ Runs evals against all workflows using mock LLM responses. Fast, deterministic, 
       - name: "Run eval suite"
         command: >
           python -m pytest tests/evals/
-          --eval-dataset=home-insurance-eval
+          --eval-dataset=mortgage-lead-eval
           --mock-llm
           --junitxml=results/eval-mock-results.xml
         timeout_minutes: 5
@@ -153,7 +153,7 @@ Runs evals against the changed workflow using real LLM calls. Triggered only on 
       - name: "Run eval on changed workflows"
         command: >
           python -m pytest tests/evals/
-          --eval-dataset=home-insurance-eval
+          --eval-dataset=mortgage-lead-eval
           --real-llm
           --changed-workflows="${CHANGED_WORKFLOWS}"
           --junitxml=results/eval-real-results.xml
@@ -354,7 +354,7 @@ pipeline:
         - name: "Run mock eval suite"
           run: >
             python -m pytest tests/evals/
-            --eval-dataset=home-insurance-eval
+            --eval-dataset=mortgage-lead-eval
             --mock-llm
             --junitxml=results/eval-mock-results.xml
           timeout_minutes: 5
@@ -380,7 +380,7 @@ pipeline:
         - name: "Run eval on changed workflows"
           run: >
             python -m pytest tests/evals/
-            --eval-dataset=home-insurance-eval
+            --eval-dataset=mortgage-lead-eval
             --real-llm
             --changed-workflows="${CHANGED_WORKFLOWS}"
             --junitxml=results/eval-real-results.xml
@@ -525,35 +525,35 @@ pipeline:
 # evals-create test configuration
 eval:
   suites:
-    home_insurance_quote:
-      dataset: home-insurance-eval
+    mortgage_lead_submission:
+      dataset: mortgage-lead-eval
       test_cases:
         - name: "happy_path_full_quote"
-          input: "I need home insurance for my 3-bedroom house"
+          input: "I need mortgage lead for my 3-bedroom house"
           expected:
-            intent: get_quote
+            intent: submit_lead
             completion_state: completed
           assert:
-            - extracted.property_type is not null
-            - extracted.address is not null
+            - extracted.loan_purpose is not null
+            - extracted.loan_amount is not null
             - response_data.goal_met == true
         
         - name: "incomplete_info_graceful"
-          input: "I want insurance"
+          input: "I want a mortgage"
           expected:
-            intent: get_quote
+            intent: submit_lead
             completion_state: active
           assert:
-            - extracted.property_type is null
+            - extracted.loan_purpose is null
             - response_data.goal_met == false
             - response_data.gap_analysis is not null
         
         - name: "intent_misclassification_resilience"
-          input: "Tell me about your insurance products compared to competitors"
+          input: "Tell me about your mortgage products compared to competitors"
           expected:
             intent: general_inquiry
           assert:
-            - intent != get_quote
+            - intent != submit_lead
 
   eval_gates:
     global:
@@ -562,7 +562,7 @@ eval:
       schema_violation_rate: "<= 0.05"
     
     per_workflow:
-      home_insurance_quote:
+      mortgage_lead_submission:
         extraction_f1: ">= 0.95"
         routing_accuracy: ">= 0.95"
 ```
@@ -583,8 +583,8 @@ eval:
     # Alternative: rule-based mock that returns fixed JSON based on input
     # strategy: rule_based
     # rules:
-    #   - match: "insurance.*house"
-    #     response: { "intent": "get_quote", "confidence": 0.95 }
+    #   - match: "mortgage.*house"
+    #     response: { "intent": "submit_lead", "confidence": 0.95 }
 ```
 
 ### 4.3 Real LLM Eval (PR Only)
@@ -611,39 +611,39 @@ eval:
 
 ---
 
-## 5. Real Project Example: home_insurance
+## 5. Real Project Example: mortgage_lead
 
 ### 5.1 Overview
 
-**home_insurance** is a home insurance quote system. The chat version routes users through a home insurance quote workflow: collect property details → gather property info → run risk assessment → present quote options.
+**mortgage_lead** is a mortgage lead submission system. The chat version routes users through a mortgage lead submission workflow: collect lead purpose → gather financial profile → run lead scoring → present rate options.
 
 ```
-User: "What's the best quote for a $500K home insurance policy?"
+User: "I'm looking for the best rate on a $500K mortgage"
     │
     ▼
-Layer 1 (Extract): { intent: "get_home_insurance_quote", coverage_amount: 500000 }
-Layer 2 (Route): home_insurance_quote workflow → collect_property_info phase
-Layer 3 (Respond): "I'd be happy to find a quote for $500K coverage. First, let me ask..."
+Layer 1 (Extract): { intent: "submit_mortgage_lead", loan_amount: 500000 }
+Layer 2 (Route): mortgage_lead_submission workflow → collect_lead_purpose phase
+Layer 3 (Respond): "I'd be happy to help you find competitive rates for $500K. First, let me ask..."
 ```
 
 ### 5.2 Backend Integration
 
-The framework's chat version calls home_insurance's backend API for quote calculations:
+The framework's chat version calls mortgage_lead's backend API for rate calculations:
 
 ```yaml
 # workflow integration configuration
 workflows:
-  home_insurance_quote:
+  mortgage_lead_submission:
     backend:
-      api: home_insurance
-      base_url: "https://home-insurance-api.${ENV}.example.com"
+      api: mortgage_lead
+      base_url: "https://mortgage-lead-api.${ENV}.example.com"
       auth:
         type: api_key
-        key: "${HOME_INSURANCE_API_KEY}"
+        key: "${MORTGAGE_LEAD_API_KEY}"
       endpoints:
-        submit_quote_application: "POST /v1/quote-applications"
-        get_quote:                "GET  /v1/quote"
-        run_risk_assessment:      "POST /v1/risk-assessment"
+        submit_lead_application: "POST /v1/lead-applications"
+        get_rate:                   "GET  /v1/rate"
+        run_lead_scoring:           "POST /v1/lead-scoring"
       timeout_seconds: 10
       retry:
         max_attempts: 2
@@ -653,46 +653,45 @@ workflows:
         recovery_timeout_seconds: 30
 ```
 
-### 5.3 Eval Dataset for home_insurance
+### 5.3 Eval Dataset for mortgage_lead
 
 ```yaml
 eval:
   suites:
-    home_insurance_quote:
-      dataset: home-insurance-quote-eval
+    mortgage_lead_submission:
+      dataset: mortgage-lead-eval
       test_cases:
-        - name: "happy_path_home_insurance_quote"
-          input: "I'm looking for a home insurance quote for a $500,000 home with a $1,000 deductible"
+        - name: "happy_path_mortgage_lead_submission"
+          input: "I'm looking for a mortgage for a $500,000 home"
           expected:
-            intent: get_home_insurance_quote
+            intent: submit_mortgage_lead
           assert:
-            - extracted.coverage_amount == 500000
-            - extracted.deductible_amount == 1000
-            - response_data.quote is not null
+            - extracted.loan_amount == 500000
+            - response_data.offer is not null
         
-        - name: "high_risk_assessment"
-          input: "Can I get a quote for a property with a risk score of 580?"
+        - name: "high_lead_score"
+          input: "Can I get a mortgage with a credit score of 580?"
           expected:
-            intent: get_home_insurance_quote
+            intent: submit_mortgage_lead
           assert:
-            - extracted.risk_score == 580
+            - extracted.credit_score == 580
             - response_data.outcome == "declined"
-            - response_data.reason contains "risk"
-        
-        - name: "high_value_property_routing"
-          input: "Need a quote for a $1.2M property in California"
+            - response_data.reason contains "credit"
+
+        - name: "high_value_lead_routing"
+          input: "Need a mortgage for a $1.2M property in California"
           expected:
-            intent: get_home_insurance_quote
+            intent: submit_mortgage_lead
           assert:
-            - extracted.coverage_amount == 1200000
-            - routing_decision.route == "high_value_property_specialist"
-        
-        - name: "first_time_homeowner_programs"
-          input: "I'm a first-time homeowner, what special programs do you have?"
+            - extracted.loan_amount == 1200000
+            - routing_decision.route == "jumbo_loan_specialist"
+
+        - name: "first_time_buyer_programs"
+          input: "I'm a first-time homebuyer, what special programs do you have?"
           expected:
-            intent: first_time_homeowner_inquiry
+            intent: first_time_buyer_inquiry
           assert:
-            - extracted.first_time_homeowner == true
+            - extracted.first_time_buyer == true
 ```
 
 ---
@@ -923,7 +922,7 @@ pipeline:
 | 1 | Should eval datasets be stored in the same repository (versioned with workflows) or in a separate eval-data repository? | Auditability vs repo bloat |
 | 2 | How should the pipeline handle schema changes to `agentState` that break checkpoint deserialization during rollback? | Rollback safety |
 | 3 | Should there be a staging environment between e2e and prod, or is e2e sufficient given canary deployments? | Environment proliferation |
-| 4 | Should eval gates be configurable per workflow (mortgage_rate_quote might need different accuracy thresholds than home_insurance_quote)? | Flexibility vs consistency |
+| 4 | Should eval gates be configurable per workflow (mortgage_rate_quote might need different accuracy thresholds than mortgage_lead_submission)? | Flexibility vs consistency |
 | 5 | How should the pipeline handle LLM provider outages during real LLM eval? Should it skip the eval stage or fail the build? | CI reliability |
 | 6 | Should deployment promote the Docker image tag (e.g., `dev-v1.2.3` → `e2e-v1.2.3` → `prod-v1.2.3`) or use the same tag across environments? | Rollback clarity vs tag proliferation |
 

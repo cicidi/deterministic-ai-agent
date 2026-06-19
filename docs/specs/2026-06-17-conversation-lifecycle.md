@@ -255,7 +255,7 @@ checkpoint:
       turn_number: integer
     
     workflow_state:
-      current_phase: string           # e.g., "collect_property_info"
+      current_phase: string           # e.g., "collect_lead_purpose"
       phase_stack: array              # return stack for nested phases
       agent_state_snapshot: object    # full AgentState copy
     
@@ -478,7 +478,7 @@ LifecycleAuditEntry {
   "trigger": "create_conversation",
   "metadata": {
     "turn_number": 0,
-    "workflow_id": "home_insurance_quote"
+    "workflow_id": "mortgage_lead_submission"
   }
 }
 
@@ -547,9 +547,9 @@ lifecycle:
 
 ```
 user_id: "user_456"
-  ├── conversation_1 (home_insurance_quote)  → state: active
-  ├── conversation_2 (home_insurance_claim)  → state: paused
-  └── conversation_3 (claim_filing)          → state: completed
+  ├── conversation_1 (mortgage_lead_submission)  → state: active
+  ├── conversation_2 (mortgage_lead_rate_check)  → state: paused
+  └── conversation_3 (lead_submission)          → state: completed
 ```
 
 A single `user_id` can have multiple concurrent conversations across different workflows. Each conversation has its own `conversation_id`, lifecycle state, and checkpoints — but all share the same `trace_id = user_id`.
@@ -663,7 +663,7 @@ When `enabled: false`, all limits are bypassed — used for testing and evaluati
 | `max_chitchat_turns` | Decline further chitchat, redirect to business intents |
 | `daily_conversation_limit` | Reject new conversation creation for that user |
 
-Non-business intents (`greeting`, `small_talk`, `out_of_scope`) each consume a chitchat turn. Business intents (`get_quote`, `file_claim`, `provide_information`) do not count toward chitchat limit. Unrecognized intents (`unrecognized_intent`) count only toward the unrecognized limit.
+Non-business intents (`greeting`, `small_talk`, `out_of_scope`) each consume a chitchat turn. Business intents (`submit_lead`, `check_rates`, `provide_information`) do not count toward chitchat limit. Unrecognized intents (`unrecognized_intent`) count only toward the unrecognized limit.
 
 These limits integrate with the [Rate Limiting spec](./2026-06-17-rate-limiting.md) for per-user/per-intent rate enforcement.
 

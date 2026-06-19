@@ -73,7 +73,7 @@ GAP_THRESHOLD=0.5              # relaxed (50% OK in dev)
 
 # Tools
 ALLOW_DANGEROUS_OPS=true       # skip dangerous_operation approval in dev
-MOCK_EXTERNAL_APIS=true        # mock premium/claims APIs
+MOCK_EXTERNAL_APIS=true        # mock rate/lead APIs
 PII_SCRUBBING=optional
 ```
 
@@ -90,10 +90,10 @@ GAP_THRESHOLD=0.3              # same as prod
 
 # Eval-specific
 EVAL_MODE=true
-EVAL_DATASET=home-insurance-eval
+EVAL_DATASET=mortgage-lead-eval
 LANGSMITH_TRACING=true         # trace eval runs
 ALLOW_DANGEROUS_OPS=false      # same strictness as prod
-MOCK_EXTERNAL_APIS=true        # mock claims APIs, but test the real logic
+MOCK_EXTERNAL_APIS=true        # mock lead APIs, but test the real logic
 ```
 
 ### 2.4 `.env.prod` (production)
@@ -283,10 +283,12 @@ framework:
 #   merge: cloud_overrides_file   # cloud secrets override .env defaults
 
   domain_models:
-    - "domain-models/home-insurance.yaml"
+    - "domain-models/mortgage-lead.yaml"
+#   - "domain-models/home-insurance.yaml"  # legacy domain model
 
   workflows:
-    - "workflows/home_insurance_quote.yaml"
+    - "workflows/mortgage_lead_submission.yaml"
+    - "workflows/mortgage_lead_submission.yaml"
 
 # At bootstrap the framework:
 # 1. Reads framework.yaml → resolves ${ENV} → selects environments.{env} section

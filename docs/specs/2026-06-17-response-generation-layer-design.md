@@ -67,7 +67,7 @@ The goal is set **asynchronously by LLM** at workflow start, stored in `agentSta
 ```
 WorkflowGoal {
   summary:          string    // human-readable summary of what the user wants
-  intent:           string    // classified intent (e.g., "get_quote")
+  intent:           string    // classified intent (e.g., "submit_lead")
   expected_entities: string[] // which entities should be collected
   expected_outputs: string[]  // which outputs should be produced
   success_criteria: string[]  // measurable criteria for "done"
@@ -76,14 +76,14 @@ WorkflowGoal {
 
 # Example
 goal: {
-  summary: "User wants a home insurance quote for their apartment",
-  intent: "get_quote",
-  expected_entities: ["property_info", "coverage_needs"],
-  expected_outputs: ["risk_assessment", "premium_calculation", "quote"],
+  summary: "User wants a mortgage lead quote for their apartment",
+  intent: "submit_lead",
+  expected_entities: ["lead_purpose", "loan amount_needs"],
+  expected_outputs: ["rate_calculation", "rate_calculation", "quote"],
   success_criteria: [
-    "property_type is known",
+    "loan_purpose is known",
     "address is collected",
-    "annual_premium is calculated",
+    "annual_rate is calculated",
     "quote is presented to user"
   ],
   priority: "normal"
@@ -114,16 +114,16 @@ The goal is guaranteed available before the goal check node runs (end of workflo
 
 ```yaml
 # Default goal fallback example:
-# intent=get_quote + entities=[property_info] → goal: "Provide home insurance quote"
+# intent=submit_lead + entities=[lead_purpose] → goal: "Provide mortgage lead quote"
 default_goal_fallback:
   strategy: derive_from_intent     # fallback derives goal from intent + collected entities
   mapping:
-    get_quote:
-      summary_template: "User wants a {product_type} insurance quote"
-      expected_outputs: ["risk_assessment", "premium_calculation", "quote"]
-    file_claim:
-      summary_template: "User wants to file a claim for {claim_type}"
-      expected_outputs: ["claim_validation", "claim_status"]
+    submit_lead:
+      summary_template: "User wants a {product_type} mortgage rate"
+      expected_outputs: ["rate_calculation", "rate_calculation", "quote"]
+    check_rates:
+      summary_template: "User wants to check rates for {loan_type}"
+      expected_outputs: ["rate_comparison", "rate_result"]
     ask_question:
       summary_template: "User asked a question about {topic}"
       expected_outputs: ["answer"]
@@ -203,19 +203,19 @@ response_generation:
 # Eval case definition for prompt evaluation
 eval_cases:
   - id: "prod_default"
-    description: "Standard insurance quote completion"
+    description: "Standard mortgage rate completion"
     given_state:
       goal:
-        summary: "User wants a home insurance quote"
-        intent: "get_quote"
+        summary: "User wants a mortgage lead quote"
+        intent: "submit_lead"
       entities:
-        property_address: "123 Main St"
-        property_type: "apartment"
+        loan_amount: "123 Main St"
+        loan_purpose: "apartment"
       outcomes:
-        premium_calculation:
-          annual_premium: 1200
+        rate_calculation:
+          annual_rate: 1200
     expected:
-      themes: ["address confirmed", "premium calculated", "next step"]
+      themes: ["address confirmed", "rate calculated", "next step"]
       forbidden_themes: ["unknown data", "fabricated outcome"]
       tone: "professional"
     threshold_pct: 95
@@ -225,15 +225,15 @@ eval_cases:
     given_state:
       goal:
         summary: "User wants a quote"
-        intent: "get_quote"
+        intent: "submit_lead"
       entities:
-        property_address: "456 Oak Ave"
-        # property_type intentionally missing
+        loan_amount: "456 Oak Ave"
+        # loan_purpose intentionally missing
       outcomes:
-        error: "property_type not collected"
+        error: "loan_purpose not collected"
     expected:
       themes: ["we need more information", "property type"]
-      forbidden_themes: ["premium calculated", "quote ready"]
+      forbidden_themes: ["rate calculated", "quote ready"]
       tone: "professional"
 
 # Eval suite runs on every prompt change. Must pass ≥95%.
@@ -247,17 +247,17 @@ Pure logic generates structured UI components. No LLM call. The widget contains 
 |--------|--------|
 | Strengths | Deterministic; zero LLM cost; consistent rendering; instant |
 | Weaknesses | Cannot adapt to unexpected outcomes; frontend must support component types |
-| Best for | Structured data presentation (premium cards, claim status, risk gauges) |
+| Best for | Structured data presentation (rate cards, lead status, risk gauges) |
 | Generation | Pure code: map outcomes → widget template → populate with entity data |
 
 ```yaml
 # Per-workflow widget mapping: outcomes → components
 widget_mapping:
-  premium:
-    outcome_key: "premium"
-    condition: "outcomes.premium is present"
-    component: premium_breakdown_card
-    required_fields: [annual_premium, monthly_premium, coverage_type]
+  rate:
+    outcome_key: "rate"
+    condition: "outcomes.rate is present"
+    component: rate_breakdown_card
+    required_fields: [annual_rate, monthly_rate, loan amount_type]
 
   risk_score:
     outcome_key: "risk_score"
@@ -279,15 +279,15 @@ Widgets are defined as registered components:
 
 ```yaml
 components:
-  premium_breakdown:
+  rate_breakdown:
     type: widget
     fields:
-      annual_premium:   { type: float, required: true }
-      monthly_premium:  { type: float, required: true }
-      coverage_type:    { type: string, required: true }
+      annual_rate:   { type: float, required: true }
+      monthly_rate:  { type: float, required: true }
+      loan amount_type:    { type: string, required: true }
       risk_score:       { type: int, range: [0, 100] }
     render:
-      template: premium_breakdown_card_template
+      template: rate_breakdown_card_template
   risk_gauge:
     type: widget
     fields:
@@ -533,7 +533,7 @@ ResponseMessage {
   text: "Here's your quote..."
   components: [
     {
-      type: "premium_breakdown_card",
+      type: "rate_breakdown_card",
       metadata: { ... },
       data: { ... }           // structured, machine-readable
     }
@@ -547,11 +547,11 @@ The `text` field is the fallback for channels that only support plain text (SMS,
 
 | Component Type | Description |
 |---------------|-------------|
-| `premium_breakdown_card` | Insurance premium details with line items |
+| `rate_breakdown_card` | Insurance rate details with line items |
 | `risk_score_gauge` | Visual risk score (0-100) |
-| `coverage_comparison_table` | Side-by-side coverage options |
-| `claim_status_tracker` | Claim lifecycle progress |
-| `claim_receipt` | Claim submission receipt with claim ID |
+| `loan_comparison_table` | Side-by-side loan options |
+| `lead_status_tracker` | Lead lifecycle progress |
+| `lead_receipt` | Lead submission receipt with lead ID |
 | `document_upload_prompt` | File upload with type constraints |
 | `approval_buttons` | Confirm / Decline / Modify actions |
 

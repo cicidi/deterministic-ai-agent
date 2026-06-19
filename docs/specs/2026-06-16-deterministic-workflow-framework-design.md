@@ -54,7 +54,7 @@ User Input
 +-----------------------+
 ```
 
-- **Context Hydration** selectively loads the latest data needed by the current business task — refreshing `AgentState` with current application form data, claim status, or payment history — so the framework knows exactly what the next step should be. It does NOT load unrelated CRM entities or exhaust all available APIs.
+- **Context Hydration** selectively loads the latest data needed by the current business task — refreshing `AgentState` with current lead data, quote history, or loan officer assignments — so the framework knows exactly what the next step should be. It does NOT load unrelated CRM entities or exhaust all available APIs.
 - **Layer 1** extracts intent and structured entities from free-form user input.
 - **Layer 2** decides the next state, validates data, and performs deterministic business logic.
 - **Layer 3** produces the user-visible response.
@@ -70,12 +70,12 @@ workflow:
       - source: session_store
         fields: [user_profile, oauth_scopes]
     on_phase_entry:        # refreshed when entering this phase
-      collect_property_info:
-        - source: application_service   # load current application form
-          fields: [property_type, address, building_age, floor_area]
-      process_claim_payment:
-        - source: claims_gateway
-          fields: [claim_amount, coverage_details]
+      collect_lead_purpose:
+        - source: application_service   # load current lead form
+          fields: [loan_purpose, loan_amount, home_value, state, zip_code]
+      distribute_lead:
+        - source: lead_distribution_engine
+          fields: [loan_officer_queue, lead_cap, licensed_states]
   layers:
     understand:
       nodes: [classify_intent, extract_entities]
@@ -90,17 +90,17 @@ workflow:
 
 Context Hydration is **selective** — it only refreshes data that the current business task depends on. The framework determines what to load based on the current `agentState.phase` and the entity bindings in the domain model.
 
-**Example (insurance quote):**
+**Example (mortgage lead submission):**
 
 ```
-agentState.phase = "collect_coverage_needs"
-    → domain model state binds entity: "property_info"
-    → load current application form data for property_info
-    → detect: property_type = "house", building_age = 5, address = null
-    → determine next task: ask for address
+agentState.phase = "collect_financial_profile"
+    → domain model state binds entity: "lead"
+    → load current lead form data
+    → detect: loan_purpose = "PURCHASE", loan_amount = 500000, credit_score = null
+    → determine next task: ask for credit score range
 ```
 
-**Not loaded:** CRM history, payment data, claim records — irrelevant to the quote task. Only the application form fields for the current phase are refreshed.
+**Not loaded:** CRM history, past leads, subscription data — irrelevant to the lead submission task. Only the lead form fields for the current phase are refreshed.
 
 **Hydration Sources:**
 
@@ -108,8 +108,8 @@ agentState.phase = "collect_coverage_needs"
 |--------|------------|-----------------|
 | **Checkpoint DB** | Every turn | Conversation history + persisted `AgentState` |
 | **Session Store** | Every turn | User profile, OAuth scopes |
-| **Domain Entity API** | On phase entry | Current entity data for the bound entity (e.g., application form state) |
-| **External Business API** | Conditional | Only when a node's code executor declares a dependency (e.g., `claims_gateway` in `process_claim_payment` state) |
+| **Domain Entity API** | On phase entry | Current entity data for the bound entity (e.g., lead form state) |
+| **External Business API** | Conditional | Only when a node's code executor declares a dependency (e.g., `lead_distribution_engine` in `distribute_lead` state) |
 
 ## 3. Key Insight: Per-Node Control, Not Per-Layer
 
@@ -208,7 +208,7 @@ Detailed permission design in [Routing & Execution Layer](./2026-06-17-routing-e
 - **[Widget Templates](./2026-06-17-widget-templates.md)** — Widget template system: structured UI components for Layer 3 responses.
 - **[RAG Interface](./2026-06-18-rag-interface.md)** — Retrieval-Augmented Generation abstraction: Document, DocumentStore, Embedder, Retriever, RAGPipeline interfaces with backend adapters.
 - **[Agent Types](./2026-06-18-agent-types.md)** — Specialized execution agents (ReadOnlyAgent, EscalationAgent) dispatched by the state machine for specific intent categories.
-- **[Home Insurance Examples](../examples/home-insurance/)** — Complete workflow definition (`workflow.yaml`), intent catalog, end-to-end scenarios, and audit log sample.
+- **[Mortgage Lead Examples](../examples/mortgage-lead/)** — Complete workflow definition (`workflow.yaml`), intent catalog, end-to-end scenarios.
 
 ## 6. Downstream: Skill-Assisted Spec Generation
 
@@ -218,7 +218,7 @@ This spec document suite serves a dual purpose:
 2. **Interview template** — a downstream skill loads these specs and, through guided Q&A, helps a developer produce a complete product-specific deterministic AI agent specification, ready for code implementation planning
 
 ```
-Developer describes their product (e.g., "insurance claims chatbot")
+Developer describes their product (e.g., "mortgage lead marketplace")
     → Skill loads framework specs as interview template
     → Skill asks product-specific, spec-by-spec questions
     → Skill outputs a complete, product-specific spec
@@ -263,7 +263,7 @@ docs/
 │   ├── 2026-06-17-widget-templates.md
 │   └── zh/
 ├── examples/
-│   └── home-insurance/
+│   └── mortgage-lead/
 └── skills/
     └── (skill definitions for downstream spec generation)
 ```

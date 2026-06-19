@@ -221,21 +221,20 @@ Code executors are registered as module+function references in the workflow YAML
 ```yaml
 # Code executor configured as a pure function reference
 executor: code
-execute: premium.calculate                  # module.function reference
+execute: rate.calculate                  # module.function reference
 input_mapping:
-  property_info: "{{entities.property_info}}"
-  coverage_needs: "{{entities.coverage_needs}}"
+  lead_purpose: "{{entities.lead_purpose}}"
+  financial_profile: "{{entities.financial_profile}}"
 output:
-  risk_score: number
-  annual_premium: number
-  monthly_premium: number
   rate_multiplier: number
+  annual_rate: number
+  monthly_payment: number
 ```
 
 | Strengths | Testable in isolation; zero framework dependency; IDE-friendly |
 |-----------|---------------------|
 | Weaknesses | No built-in lifecycle hooks; manual audit trail |
-| Best for | Stateless computation; risk scoring; premium calculation |
+| Best for | Stateless computation; risk scoring; rate calculation |
 
 #### Option B: StateHandler Class
 
@@ -244,13 +243,13 @@ When richer lifecycle hooks are needed (pre/post execute, audit, error handling)
 ```yaml
 # StateHandler configured with lifecycle metadata
 executor: code
-execute: premium.CalculatePremiumHandler    # class reference
-state_name: calculate_premium
-state_entity: premium_result
+execute: rate.CalculateRateHandler    # class reference
+state_name: calculate_rate
+state_entity: rate_result
 lifecycle:
-  pre_execute: premium.validate_inputs       # optional hook
-  post_execute: premium.audit_calculation    # optional hook
-  on_error: premium.log_calculation_error    # optional hook
+  pre_execute: rate.validate_inputs       # optional hook
+  post_execute: rate.audit_calculation    # optional hook
+  on_error: rate.log_calculation_error    # optional hook
 audit: true                                  # framework auto-records audit trail
 ```
 
@@ -280,9 +279,9 @@ Decision nodes answer: *"Which path should the workflow take next?"* — beyond 
 > **All LLM output is JSON.** Decision nodes that use LLM produce structured JSON output with framework-enforced guardrails (schema validation, field presence, type coercion). See HLD Section 4.3.
 
 Examples:
-- Risk triage: `risk_score > 80 → manual_review` / `risk_score ≤ 80 → auto_approve`
+- Risk triage: `rate_multiplier > 80 → manual_review` / `rate_multiplier ≤ 80 → auto_approve`
 - Fraud detection: anomaly patterns trigger `manual_review` branch
-- Coverage routing: `coverage_type == "basic"` routes to `calculate_basic_premium`
+- Loan routing: `loan_type == "fixed"` routes to `calculate_fixed_rate`
 
 ### 3.2 Implementation Options
 
@@ -293,21 +292,21 @@ All decisions must go through the rule engine first. No LLM involvement. Rules a
 ```yaml
 # Decision ruleset — evaluated top-to-bottom, first match wins
 decision_rules:
-  risk_triage:
-    input: entities.premium_calculation.risk_score
+  assign_lead:
+    input: entities.rate_calculation.rate_multiplier
     rules:
-      - condition: "risk_score >= 0 AND risk_score <= 30"
+      - condition: "rate_multiplier >= 0 AND rate_multiplier <= 30"
         decision:
           route: auto_approve
-          reason: "Low risk: {{risk_score}}"
-      - condition: "risk_score > 30 AND risk_score <= 80"
+          reason: "Low risk: {{rate_multiplier}}"
+      - condition: "rate_multiplier > 30 AND rate_multiplier <= 80"
         decision:
           route: standard_review
-          reason: "Medium risk: {{risk_score}}"
-      - condition: "risk_score > 80"
+          reason: "Medium risk: {{rate_multiplier}}"
+      - condition: "rate_multiplier > 80"
         decision:
           route: manual_review
-          reason: "High risk: {{risk_score}}"
+          reason: "High risk: {{rate_multiplier}}"
     on_unmatched: escalate               # default action when no rule matches
 ```
 
@@ -369,7 +368,7 @@ Framework runs evals on each LLM decision model change. Must pass ≥ 95% of eva
 | Coverage | Closed-world rules | Closed-world rules |
 | Unhandled case | Default route | Error → escalate |
 | Auditability | Full | Full |
-| Use case | Most production | High-security (claims, PII data) |
+| Use case | Most production | High-security (lead distribution, PII data) |
 
 ---
 
@@ -385,9 +384,9 @@ next_node = resolve(agentState.phase, intent)
 
 Key behaviors:
 
-1. **Normal flow**: `phase=collect_property_info` + `intent=provide_information` → route to `validate_property_info`
-2. **Mid-flow question**: `phase=collect_property_info` + `intent=ask_question` → route to `rag_faq` sub-workflow
-3. **Return after question**: when `rag_faq` completes → return to **the previous phase** (`collect_property_info`)
+1. **Normal flow**: `phase=collect_lead_purpose` + `intent=provide_information` → route to `validate_lead_purpose`
+2. **Mid-flow question**: `phase=collect_lead_purpose` + `intent=ask_question` → route to `rag_faq` sub-workflow
+3. **Return after question**: when `rag_faq` completes → return to **the previous phase** (`collect_lead_purpose`)
 
 The framework maintains a **phase return stack** to support this. When a mid-flow question detours, the current phase is pushed onto the stack. When the question is answered, the stack is popped, and the workflow resumes at the previous phase.
 
@@ -395,7 +394,7 @@ The framework maintains a **phase return stack** to support this. When a mid-flo
 
 ```
 agentState = {
-    phase:          "collect_property_info",   // current phase
+    phase:          "collect_lead_purpose",   // current phase
     phase_stack:    [],                         // push/pop for mid-flow detours
     collectedFields: { ... },                   // accumulated entity data
     ...
@@ -406,20 +405,20 @@ agentState = {
 **Flow example:**
 
 ```
-1. User: "I want a quote for my apartment"
-   phase = "collect_property_info"
+1. User: "I want a mortgage for my apartment"
+   phase = "collect_lead_purpose"
    
 2. Agent: "What's your address?"
    (waiting for user input)
    
-3. User: "What does basic plan cover?"
+3. User: "What does fixed rate cover?"
    intent = ask_question
-   → phase_stack.push("collect_property_info")    // save current phase
+   → phase_stack.push("collect_lead_purpose")    // save current phase
    → route to rag_faq sub-workflow               // answer question
    
-4. Agent: "Basic plan covers fire, theft, and water damage..."
+4. Agent: "Fixed rate mortgages have a consistent interest rate throughout the loan term..."
    rag_faq complete
-   → phase = phase_stack.pop()                    // restore: "collect_property_info"
+   → phase = phase_stack.pop()                    // restore: "collect_lead_purpose"
    → agent continues: "So, what's your address?"
 ```
 
@@ -430,12 +429,12 @@ The framework resolves the next node by looking up `(current_phase, detected_int
 ```yaml
 # Phase routing table — next node resolved from (phase, intent)
 phase_routing:
-  collect_property_info:
-    provide_information: validate_property_info     # normal flow
+  collect_lead_purpose:
+    provide_information: validate_lead_purpose     # normal flow
     ask_question: rag_faq                            # detour (push phase → answer → pop → resume)
     cancel: terminate                                # exit (pop stack if non-empty, else terminate)
-  validate_property_info:
-    provide_information: assess_risk
+  validate_lead_purpose:
+    provide_information: assign_lead
     ask_question: rag_faq
     cancel: terminate
   # ... additional phases added per domain
@@ -443,15 +442,15 @@ phase_routing:
 
 ### 4.4 Phase Continuity
 
-The zelkim "once transactional, always transactional" pattern is reframed as: **phase determines routing, not a binary mode flag.** When `phase` is a transactional phase (e.g., `collect_property_info`), the routing always stays within the transactional branch — questions detour but return, and the phase stack ensures continuity.
+The zelkim "once transactional, always transactional" pattern is reframed as: **phase determines routing, not a binary mode flag.** When `phase` is a transactional phase (e.g., `collect_lead_purpose`), the routing always stays within the transactional branch — questions detour but return, and the phase stack ensures continuity.
 
 ```yaml
 # Phase definition includes routing map
 phases:
-  collect_property_info:
-    entity: property_info
+  collect_lead_purpose:
+    entity: lead_purpose
     transitions:
-      provide_information: validate_property_info
+      provide_information: validate_lead_purpose
       ask_question: rag_faq                    # detour → return after
       cancel: terminate
 ```
@@ -464,7 +463,7 @@ phases:
 
 **Sub-workflows are the definition language for A2A (Agent-to-Agent) communication.** They define *what* agents communicate and *how* they coordinate — the inputs, outputs, permissions, and execution contracts between agents. See [A2A Protocol spec](./2026-06-17-a2a-protocol.md) for the runtime protocol that sub-workflows execute over (agent discovery, capability negotiation, task lifecycle, message formats).
 
-Sub-workflows are **complete, standalone workflows** with the same structure as the super workflow — their own domain model (entities, states, transitions), permission model, retry budgets, and routing. Shared capabilities (RAG FAQ, property verification, claim processing) are defined once and invoked from any state in any parent workflow.
+Sub-workflows are **complete, standalone workflows** with the same structure as the super workflow — their own domain model (entities, states, transitions), permission model, retry budgets, and routing. Shared capabilities (RAG FAQ, lead verification, lead distribution) are defined once and invoked from any state in any parent workflow.
 
 This prevents the zelkim anti-pattern where RAG logic is duplicated across conversational and transactional branches.
 
@@ -569,7 +568,7 @@ parallel_nodes:
   from: search_kb
   fan_out:
     - search_policy_db       # search policy knowledge base
-    - search_claims_db       # search claims knowledge base
+    - search_lead_db           # search lead knowledge base
     - search_faq_db          # search FAQ database
   fan_in: merge_results      # converge here when all 3 complete
 ```
@@ -609,12 +608,12 @@ handle_question_in_quote:
   executor: sub_workflow
   sub_workflow: rag_faq
   mode: sync
-  on_return: collect_property_info
+  on_return: collect_lead_purpose
 
 # Async invocation
 background_risk_check:
   executor: sub_workflow
-  sub_workflow: property_verification
+  sub_workflow: lead_verification
   mode: async
   on_complete: risk_result_received     # callback when async sub-workflow finishes
 ```
@@ -645,7 +644,7 @@ states:
     input_mapping:
       question: "{{state.last_user_message}}"
       conversation_context: "{{state.conversation_history}}"
-    on_return: collect_property_info                    # resume parent phase after return
+    on_return: collect_lead_purpose                    # resume parent phase after return
 ```
 
 ### 5.7 LangGraph Support Summary
@@ -700,7 +699,7 @@ Errors are categorized for **audit logging**, not for separate routing paths. Th
 | `api_error` | External API timeout, 5xx response, connection refused |
 | `tool_error` | MCP server unavailable, command non-zero exit |
 | `validation_error` | Data invariant violation, type mismatch |
-| `business_rule_error` | Coverage exceeds limit, duplicate claim |
+| `business_rule_error` | Loan amount, duplicate lead |
 | `permission_error` | Unauthorized tool call, forbidden transition |
 | `unrecoverable_error` | Corrupted state, missing required entity |
 
@@ -779,9 +778,9 @@ error_handling:
 
 # Per-node override
 nodes:
-  process_claim_payment:
-    error_node: escalate_to_human  # claim payment errors always go to human
-  calculate_premium:
+  distribute_lead:
+    error_node: escalate_to_human  # lead distribution errors always go to human
+  calculate_rate:
     error_node: fallback_value     # use default rate on calculation failure
 ```
 
@@ -808,13 +807,13 @@ After `errorNode` handles the error, the conversation resumes from the state tha
 # Defined per node in workflow YAML
 permission:
   allowed_tools:
-    - calculate_premium_api        # read: can call premium calculation
-    - claims_gateway_api            # dangerous_operation_write: can process claims
+    - calculate_rate_api        # read: can call rate calculation
+    - lead_distribution_api            # dangerous_operation_write: can distribute leads
     - vector_search_mcp            # read: can query knowledge base
   allowed_transitions:
-    - assess_risk
+    - assign_lead
     - manual_review
-    - generate_quote               # can route to these states
+    - distribute_lead               # can route to these states
   # deny_all_transitions_except: true   # strict mode
 ```
 
@@ -826,33 +825,33 @@ Every tool (API, MCP server, command, LLM call) has metadata:
 
 ```yaml
 tools:
-  calculate_premium_api:
+  calculate_rate_api:
     type: api
     access_level: read
-    description: "Calculate insurance premium based on property + coverage data"
-    endpoint: POST /api/v1/premium/calculate
+    description: "Calculate mortgage rate based on loan purpose + financial profile data"
+    endpoint: POST /api/v1/rate/calculate
     timeout_ms: 5000
 
-  claims_gateway_api:
+  lead_distribution_api:
     type: api
     access_level: dangerous_operation_write
-    description: "Process claim through the claims gateway"
-    endpoint: POST /api/v1/claims/submit
+    description: "Submit lead through the lead distribution engine"
+    endpoint: POST /api/v1/leads/submit
     timeout_ms: 15000
     requires_approval: true       # human-in-the-loop gate
 
   vector_search_mcp:
     type: mcp
     access_level: read
-    description: "Semantic search over insurance knowledge base"
+    description: "Semantic search over mortgage knowledge base"
     server: knowledge_base_mcp
     tool_name: search_documents
 
-  run_risk_model_cmd:
+  run_lead_scoring_model:
     type: command
     access_level: read
-    description: "Execute risk assessment model"
-    command: "python /opt/models/risk_assessment.py"
+    description: "Execute mortgage lead scoring model"
+    command: "python /opt/models/lead_scoring.py"
     timeout_ms: 30000
 ```
 
@@ -883,10 +882,10 @@ ToolResult:
 
 | Access Level | Examples | Extra Controls |
 |-------------|----------|---------------|
-| `read` | Vector search, premium calculation, policy lookup | None |
+| `read` | Vector search, rate calculation, policy lookup | None |
 | `write` | Save quote, update profile, log event | Audit trail |
 | `sensitive_data_read` | View PII, medical records, credit score | OAuth scope + audit |
-| `dangerous_operation_write` | Process claim, cancel policy, delete data | Human approval gate + OAuth + audit |
+| `dangerous_operation_write` | Distribute lead, cancel application, delete data | Human approval gate + OAuth + audit |
 
 ### 7.6 OAuth / Role-Based Enforcement
 

@@ -132,7 +132,7 @@ All coercions are recorded in the `LLMResult` with original and coerced values f
   "llm_call_id": "call_abc123",
   "coercions": [
     {
-      "field": "building_age",
+      "field": "floor_area",
       "original": "2.5",
       "coerced": 2,
       "coercion_type": "str_to_int_truncated",
@@ -197,9 +197,9 @@ The structured format uses a separator block that is easy for LLMs to parse and 
 | `not_valid_json` | `Response is not valid JSON. Ensure output is a JSON object.` |
 
 ```
-Attempt 1 → LLM responds with {"intent": "get_quote"}    → missing "confidence" field
-Attempt 2 → LLM responds with {"intent": "get_quote", "confidence": "high"}  → type error (string not number)
-Attempt 3 → LLM responds with {"intent": "get_quote", "confidence": 0.92}    → valid, return
+Attempt 1 → LLM responds with {"intent": "submit_lead"}    → missing "confidence" field
+Attempt 2 → LLM responds with {"intent": "submit_lead", "confidence": "high"}  → type error (string not number)
+Attempt 3 → LLM responds with {"intent": "submit_lead", "confidence": 0.92}    → valid, return
 ```
 
 ### 3.4 LLM +1 Extra Retry
@@ -236,11 +236,11 @@ Schema validation checks structure — not correctness. The gateway supports an 
 The standard `minimum` keyword enforces the threshold: the LLM must produce valid JSON with `confidence >= 0.7`, or the gateway treats it as a `confidence_below_threshold` violation. This prevents low-confidence guesses from being silently accepted.
 
 ```
-Attempt 1 → {"intent": "get_quote", "confidence": 0.45}
+Attempt 1 → {"intent": "submit_lead", "confidence": 0.45}
            → schema valid, but confidence below minimum (0.45 < 0.7) → retry
-Attempt 2 → {"intent": "get_quote", "confidence": 0.0}
+Attempt 2 → {"intent": "submit_lead", "confidence": 0.0}
            → schema valid, confidence below minimum (0.0 < 0.7) → retry
-Attempt 3 → {"intent": "get_quote", "confidence": 0.92}
+Attempt 3 → {"intent": "submit_lead", "confidence": 0.92}
            → valid + threshold met → return
 ```
 
@@ -700,16 +700,16 @@ llm:
 Post-process validation + field-level content quality checks (Instructor + Guardrails pattern). Beyond JSON schema validation, each field can carry content rules: regex patterns, length bounds, semantic checks, email/phone format.
 
 ```
-Schema: { email: string, phone: string, building_age: integer }
-LLM output: { "email": "call me", "phone": "N/A", "building_age": 999 }
+Schema: { email: string, phone: string, floor_area: integer }
+LLM output: { "email": "call me", "phone": "N/A", "floor_area": 999 }
 
 → JSON parse ✓, schema match ✓, type coercion ✓
 → email: pattern /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/ → FAIL ("call me" is not an email)
 → phone: min_length=10 → FAIL ("N/A" is 3 chars)
-→ building_age: 0 <= 999 <= 200 → FAIL (out of range)
+→ floor_area: 0 <= 999 <= 200 → FAIL (out of range)
 
 → Retry with validation context injected per field
-→ Reask: "email must be valid email address; phone must be at least 10 digits; building_age must be 0-200 years"
+→ Reask: "email must be valid email address; phone must be at least 10 digits; floor_area must be 0-200 years"
 ```
 
 Content validators:
@@ -719,7 +719,7 @@ Content validators:
 | `pattern` | Regex match | email, phone, postal code format |
 | `min_length` / `max_length` | String length bounds | name ≥ 2 chars, phone ≥ 10 digits |
 | `ge` / `le` | Numeric range | `0 <= age <= 200` |
-| `ValidChoices` | Value in allowed set | `coverage_type in [basic, standard, premium]` |
+| `ValidChoices` | Value in allowed set | `loan_type in [fixed, adjustable, hybrid]` |
 | `TwoWords` | At least 2 words | Free-text response must contain substantive content |
 | `MinLength` | Min char count | Response text ≥ 50 chars |
 
@@ -837,16 +837,16 @@ If a schema exceeds provider limits after preprocessing, the gateway emits a war
 
 ```yaml
 extraction_nodes:
-  collect_property_info_extract:
+  collect_lead_purpose_extract:
     executor: llm
     output_schema:          # MANDATORY — gateway enforces
-      property_type:
+      loan_purpose:
         type: string
         required: true
       address:
         type: string
         required: true
-      building_age:
+      floor_area:
         type: number
         required: true
       floor_area:
@@ -858,7 +858,7 @@ extraction_nodes:
 
 ```yaml
 decision_nodes:
-  risk_triage:
+  assign_lead:
     executor: llm
     output_schema:          # MANDATORY
       route:

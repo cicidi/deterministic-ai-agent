@@ -1,7 +1,7 @@
 # State Machine Layer Design — transitions + LangGraph Fusion
 
 > See also: [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) for overall architecture and non-FSM concerns.
-> All concrete workflow examples have been extracted to [examples/home-insurance/](../../examples/home-insurance/).
+> All concrete workflow examples have been extracted to [examples/mortgage-lead/](../../examples/mortgage-lead/).
 
 ## Changelog
 
@@ -72,18 +72,18 @@ States and transitions are defined purely in YAML. No code touches the state gra
 ```yaml
 # transitions.yaml
 states:
-  - name: collect_info
+  - name: collect_lead_detail
     executor: llm
     intent_policy:
-      accept: [provide_information, ask_question]
+      accept: [provide_lead_detail, ask_question]
       on_unlisted: ask_confirm
-  - name: calculate_premium
+  - name: distribute_lead
     executor: code
-    action: compute_premium
+    action: distribute_lead_to_officers
 
 transitions:
-  - from: collect_info
-    to: calculate_premium
+  - from: collect_lead_detail
+    to: distribute_lead
     guard: "context_complete"
 ```
 
@@ -98,24 +98,24 @@ States are defined programmatically in Python. The developer constructs LangGrap
 ```python
 from framework import StateNode, Transition, build_graph
 
-collect_info = StateNode(
-    name="collect_info",
+collect_lead_detail = StateNode(
+    name="collect_lead_detail",
     executor="llm",
-    intent_policy={"accept": ["provide_information"], "on_unlisted": "ask_confirm"},
+    intent_policy={"accept": ["provide_lead_detail"], "on_unlisted": "ask_confirm"},
 )
 
-calculate_premium = StateNode(
-    name="calculate_premium",
+distribute_lead = StateNode(
+    name="distribute_lead",
     executor="code",
-    action=compute_premium,
+    action=distribute_lead_to_officers,
 )
 
-collect_info >> Transition(to=calculate_premium, guard="context_complete")
+collect_lead_detail >> Transition(to=distribute_lead, guard="context_complete")
 
-graph = build_graph([collect_info, calculate_premium])
+graph = build_graph([collect_lead_detail, distribute_lead])
 ```
 
-**Pros:** Guards can be arbitrary Python functions (`guard=lambda ctx: ctx.risk_score > 80 and ctx.amount > 5000`). Full IDE support (autocomplete, type-checking, refactoring). Easier unit testing of individual nodes.
+**Pros:** Guards can be arbitrary Python functions (`guard=lambda ctx: ctx.loan_amount <= 920000 and ctx.state in ctx.licensed_states`). Full IDE support (autocomplete, type-checking, refactoring). Easier unit testing of individual nodes.
 
 **Cons:** Less auditable — non-technical stakeholders cannot read the state machine. The graph definition is spread across Python files rather than in a single declarative artifact. Risk of imperative leaks (business logic mixed with graph construction).
 
@@ -126,16 +126,16 @@ A YAML file defines the base structure (states, transitions, metadata). Complex 
 ```yaml
 # transitions.yaml
 states:
-  - name: assess_risk
+  - name: assign_lead
     executor: code
-    action: assess_risk
-    exit_guard: high_risk_override  # references a Python function
+    action: assign_lead_to_officer
+    exit_guard: officer_eligible  # references a Python function
 ```
 
 ```python
 # guards.py
-def high_risk_override(ctx: AgentState) -> bool:
-    return ctx.risk_score > 80 and ctx.total_claims > 3
+def officer_eligible(ctx: AgentState) -> bool:
+    return ctx.loan_amount <= 920000 and ctx.state in ctx.licensed_states
 ```
 
 **Pros:** Best of both worlds — YAML for structure/auditability, Python for complex logic. Guards stay readable while supporting arbitrary complexity. YAML remains the definition; Python code is referenced by name, never drives state transitions directly.
@@ -152,19 +152,22 @@ Python functions (guards, validators, actions, tool bindings) are registered by 
 # actions.py
 from framework import register_action
 
-@register_action("compute_premium")
-def compute_premium(ctx: AgentState) -> dict:
-    base = ctx.rate_table.get(ctx.coverage_type)
-    return {"premium": base * ctx.age_factor * ctx.risk_multiplier}
+@register_action("distribute_lead_to_officers")
+def distribute_lead_to_officers(ctx: AgentState) -> dict:
+    eligible = [lo for lo in ctx.loan_officer_queue
+                if lo.licensed_states.contains(ctx.lead_state)
+                and lo.loan_range.matches(ctx.loan_amount)]
+    return {"assigned_officers": eligible[:ctx.lead_cap]}
 ```
 
 ```python
 # guards.py
 from framework import register_guard
 
-@register_guard("high_risk_override")
-def high_risk_override(ctx: AgentState) -> bool:
-    return ctx.risk_score > 80 and ctx.total_claims > 3
+@register_guard("officer_eligible")
+def officer_eligible(ctx: AgentState) -> bool:
+    return ctx.loan_amount <= 920000 and ctx.state in ctx.licensed_states
+    return ctx.loan_amount <= 920000 and ctx.state in licensed_states
 ```
 
 ```python
@@ -181,10 +184,10 @@ def zip_code_check(value: str) -> bool:
 ```yaml
 # workflow.yaml
 states:
-  - name: assess_risk
+  - name: assign_lead
     executor: code
-    action: compute_premium              # references @register_action("compute_premium")
-    exit_guard: high_risk_override       # references @register_guard("high_risk_override")
+    action: distribute_lead_to_officers     # references @register_action("distribute_lead_to_officers")
+    exit_guard: officer_eligible            # references @register_guard("officer_eligible")
     output_schema:
       zip_code:
         type: str
@@ -200,7 +203,7 @@ workflow.yaml loaded at startup
 For each state, for each guard/action/validator name:
   1. Look up in global registry (dict[str, Callable])
   2. Match found → bind to node
-  3. Match not found → framework raises StartupError("action 'compute_premium' not registered")
+  3. Match not found → framework raises StartupError("action 'distribute_lead_to_officers' not registered")
        │
        ▼
 If any binding fails → framework refuses to start
@@ -263,7 +266,7 @@ Each state can carry 5 types of metadata, enforced at different points in the st
               |   |  (runtime — assertion error on violation)|  |
               |   +----------------------------------------+  |
               |                                                |
-              |   action: compute_premium(data)                 |
+              |   action: distribute_lead_to_officers(data)       |
               |                                                |
               |   +----------------------------------------+  |
               |   |  exit_guard                              |  |
@@ -295,7 +298,7 @@ Each state can carry 5 types of metadata, enforced at different points in the st
 
 ### 3.2 Example Patterns
 
-> For a complete state annotated with all 5 metadata fields, see `assess_risk` and `calculate_premium` states in [workflow.yaml](../../examples/home-insurance/workflow.yaml). Below are the key behavioral patterns.
+> For a complete state annotated with all 5 metadata fields, see `collect_lead_purpose` and `distribute_lead` states in [workflow.yaml](../../examples/mortgage-lead/workflow.yaml). Below are the key behavioral patterns.
 
 **Guard vs Contract:**
 
@@ -442,14 +445,14 @@ transitions:
 |------|--------|---------|
 | Literal | quoted or unquoted value | `true`, `0`, `"CRITICAL"` |
 | Function call | `fn(args)` | `now()`, `uuid4()`, `len(collectedFields.items)` |
-| Field reference | `collectedFields.x` | `collectedFields.premium * 0.1` |
+| Field reference | `collectedFields.x` | `collectedFields.loan_amount * 0.8` |
 
 **set_field vs action function output_schema:**
 
 | Mechanism | When | For |
 |-----------|------|-----|
 | `on_entry / on_exit / on_take.set_field` | Start/end of any state or transition | Metadata, flags, timestamps, counters |
-| `action() return dict` → `output_schema` merger | During state main execution | Computed business data (premium, total, risk_score) |
+| `action() return dict` → `output_schema` merger | During state main execution | Computed business data (loan_amount, rate, assigned_officer) |
 
 Complex computation still belongs in action functions. Simple field assignments belong in YAML.
 
@@ -543,7 +546,7 @@ This guarantees that the graph PNG committed in the repo is always consistent wi
 
 > For complete end-to-end conversation examples (quote flow, claim flow, high-risk routing), see [e2e-scenarios.md](../../examples/home-insurance/e2e-scenarios.md). The walkthrough covers:
 > - LLM-powered data collection with tool calling
-> - Deterministic code execution (risk scoring, premium calculation)
+> - Deterministic code execution (lead distribution, rate calculation)
 > - Guard-based routing and self-loops
 > - Human-in-the-loop interrupt + approval
 > - Audit log auto-generation

@@ -116,6 +116,43 @@ auth:
 
 If neither succeeds, return 401. Failed OAuth introspection (provider down) with no valid JWT → 503 (service unavailable, retry later).
 
+### 2.5 Keycloak Configuration (Sample)
+
+Extracted from mfangdai (mRateQuote) production deployment. Dual auth: JWT validation against Keycloak JWKS + API key for webhook endpoints.
+
+```yaml
+# framework.yaml
+auth:
+  providers:
+    - type: keycloak
+      realm: mRateQuote
+      client_id: frontend
+      grant_type: client_credentials
+      host: "https://mratequote.live:17832/auth"
+      role_converter: realm_access    # extracts realm_access.roles from JWT, prefixes ROLE_
+      endpoints:
+        jwks: "/realms/mRateQuote/protocol/openid-connect/certs"
+        token: "/realms/mRateQuote/protocol/openid-connect/token"
+    - type: api_key
+      header_name: security-token      # used by Wix webhook calls and service-to-service
+      token: "${API_KEY}"
+
+  role_mapping:
+    # Keycloak realm roles → framework permissions
+    ROLE_query_lead: [query_lead, query_borrower]
+    ROLE_create_quote: [create_quote, add_product_quote]
+    ROLE_update_lead: [update_lead, delete_lead]
+    ROLE_admin: [*]
+
+  endpoint_permissions:
+    "/lead": { POST: permitAll, GET: query_lead, PUT: update_lead, DELETE: delete_lead }
+    "/borrower": { POST: permitAll, GET: query_borrower }
+    "/quote": { GET: query_quote, POST: create_quote }
+    "/wix/**": { POST: permitAll }     # API key validated separately
+```
+
+Role-based access mirrors the mfangdai production system: BORROWER role for lead submission/status, LOAN_OFFICER role for quoting/searching, ADMIN for all operations.
+
 ---
 
 ## 3. Implementation Options
@@ -239,8 +276,8 @@ RoleResolver {
 
 ResolvedRoles {
   user_id:       string
-  groups:        string[]    // raw groups from IdP (e.g., "insurance_agent", "underwriter_l2")
-  permissions:   string[]    // mapped permissions (e.g., "quote:read", "claim:approve")
+  groups:        string[]    // raw groups from IdP (e.g., "mortgage_agent", "loan_officer_l2")
+  permissions:   string[]    // mapped permissions (e.g., "lead:read", "lead:approve")
   tenant_id?:    string
 }
 ```

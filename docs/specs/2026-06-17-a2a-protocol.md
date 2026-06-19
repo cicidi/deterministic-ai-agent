@@ -151,7 +151,7 @@ states:
           conversation_context: "{{state.conversation_history}}"
       constraints:
         deadline_ms: 10000
-    on_return: collect_property_info
+    on_return: collect_lead_purpose
 ```
 
 The framework auto-generates the A2A envelope from this mapping. The developer never writes A2A messages manually.
@@ -171,7 +171,7 @@ The framework exposes two protocol families. Both are JSON-based, stateless at t
 | **Discovery** | MCP `list_tools` | Agent Registry `discover` |
 | **Response** | ToolResult { success, data } | AgentResult { status, results, audit } |
 | **Auth** | MCP server-level auth | Inherited from caller's UserContext |
-| **Example** | `calculate_premium(params)` | "Process a claim for this policy → agent_claims" |
+| **Example** | `calculate_rate(params)` | "Distribute a lead → agent_lead_distribution" |
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -211,7 +211,7 @@ protocols:
     enabled: true
     servers:                          # see Tool Ecosystem spec §7
       knowledge_base: ...
-      claims_gateway: ...
+      lead_distribution_engine: ...
 
   a2a:
     enabled: true
@@ -282,10 +282,10 @@ a2a:
       - agent_id: rag_faq
         endpoint: "http://localhost:8001"
         health_check_path: "/health"   # GET endpoint, must return 200
-      - agent_id: claims_processor
+      - agent_id: lead_distribution_agent
         endpoint: "http://localhost:8002"
         health_check_path: "/health"
-      - agent_id: property_verification
+      - agent_id: lead_verification
         endpoint: "http://localhost:8003"
         health_check_path: "/health"
     health_check_interval_sec: 10      # how often to probe agent health
@@ -314,16 +314,16 @@ states:
     agent: rag_faq
     mode: sync
     timeout_ms: 10000
-    on_return: collect_property_info
+    on_return: collect_lead_purpose
 
 # Async A2A invocation
 states:
-  background_verification:
+  background_lead_check:
     executor: a2a_invoke
-    agent: property_verification
+    agent: lead_verification
     mode: async
-    on_complete: risk_result_received         # callback when async agent finishes
-    on_timeout: proceed_without_risk_check    # fallback if async agent doesn't respond
+    on_complete: lead_result_received         # callback when async agent finishes
+    on_timeout: proceed_without_lead_check    # fallback if async agent doesn't respond
 ```
 
 ### 5.2 Sync Flow
@@ -409,9 +409,9 @@ Agents may restrict which callers can invoke them:
 # Agent registry entry with caller allowlist
 agent_registry:
   agents:
-    - agent_id: claims_processor
+    - agent_id: lead_distribution_agent
       allowed_callers:
-        - home_insurance_quote              # only this workflow can invoke
+        - mortgage_lead_submission              # only this workflow can invoke
       deny_all_others: true
     - agent_id: rag_faq
       allowed_callers: ["*"]                # any agent can invoke
@@ -424,9 +424,9 @@ When an A2A invocation fails, the error routes to `errorNode` following the same
 ```yaml
 # Per-node A2A error configuration
 states:
-  handle_claim:
+  handle_lead_distribution:
     executor: a2a_invoke
-    agent: claims_processor
+    agent: lead_distribution_agent
     mode: sync
     on_error:
       route_to: errorNode

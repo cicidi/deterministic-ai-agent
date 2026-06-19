@@ -1,0 +1,400 @@
+openapi: "3.1.0"
+
+info:
+  title: Mortgage Lead Domain Model
+  version: "1.0.0"
+  description: >
+    Data model for mortgage lead marketplace workflows (lead submission, quote, distribution).
+    Extracted from mfangdai (mRateQuote) production system. Defined in OpenAPI 3.1 Schema format.
+    Framework consumes these schemas to auto-generate LLM extraction rules, field validators,
+    and structured output contracts.
+
+components:
+  schemas:
+
+    # ─── Contact & Address ───
+
+    Contact:
+      description: "Borrower or loan officer contact information"
+      type: object
+      required: [phone, email]
+      properties:
+        phone:
+          type: string
+          pattern: "^\\+?[1-9]\\d{9,14}$"
+          description: "Phone number (E.164 format preferred)"
+          examples: ["+14155551234", "6505551234"]
+        email:
+          type: string
+          format: email
+          description: "Email address"
+          examples: ["borrower@example.com"]
+        website:
+          type: string
+          format: uri
+          description: "Personal or business website (optional)"
+
+    Address:
+      description: "Property address (US)"
+      type: object
+      required: [addressLine1, city, state, zipCode]
+      properties:
+        addressLine1:
+          type: string
+          minLength: 5
+          description: "Street address including house number"
+          examples: ["123 Main St", "456 Oak Avenue Apt 3B"]
+        addressLine2:
+          type: string
+          description: "Unit, suite, or apartment number"
+        city:
+          type: string
+          minLength: 2
+          description: "City name"
+          examples: ["San Francisco", "New York"]
+        state:
+          type: string
+          enum: [AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA,
+                 ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK,
+                 OR, PA, PR, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
+          description: "US state or territory (2-letter postal code)"
+        zipCode:
+          type: string
+          minLength: 5
+          maxLength: 10
+          pattern: "^\\d{5}(-\\d{4})?$"
+          description: "US ZIP code (5-digit or ZIP+4)"
+          examples: ["94105", "10001-1234"]
+        country:
+          type: string
+          default: "US"
+          enum: [US]
+          description: "Country code (ISO 3166-1 alpha-2)"
+
+    # ─── People ───
+
+    Borrower:
+      description: "Mortgage applicant submitting a lead"
+      type: object
+      required: [firstName, lastName, email, phone]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          description: "First name"
+        lastName:
+          type: string
+          minLength: 1
+          description: "Last name"
+        email:
+          type: string
+          format: email
+          description: "Borrower email (matches Contact.email)"
+        phone:
+          type: string
+          description: "Borrower phone (matches Contact.phone)"
+        languages:
+          type: array
+          items:
+            type: string
+          description: "Preferred languages (e.g. ['en', 'zh'])"
+          default: ["en"]
+        borrowerType:
+          type: string
+          enum: [INDIVIDUAL, JOINT, TRUST, CORPORATION]
+          description: "Type of borrower"
+          default: INDIVIDUAL
+        creditScoreRange:
+          type: string
+          enum: [EXCELLENT, GOOD, FAIR, POOR, UNKNOWN]
+          description: "Self-reported credit score range"
+          default: UNKNOWN
+        credentialId:
+          type: string
+          description: "Keycloak/SSO credential ID"
+
+    LoanOfficer:
+      description: "Mortgage loan officer / broker"
+      type: object
+      required: [firstName, lastName, nmls, licensedStates, email, phone]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        nmls:
+          type: string
+          description: "NMLS unique identifier (Nationwide Mortgage Licensing System)"
+          examples: ["1234567"]
+        licensedStates:
+          type: array
+          items:
+            type: string
+          description: "States where loan officer is licensed (2-letter codes)"
+          examples: [["CA", "NY", "TX"]]
+        nonQmLicensedStates:
+          type: array
+          items:
+            type: string
+          description: "States licensed for Non-QM loans"
+        loanOfficerMemberType:
+          type: string
+          enum: [T1, T2]
+          description: "T1 = push subscriber (direct lead assignment), T2 = marketplace browser"
+          default: T2
+        loanOfficerAcceptLoanRange:
+          type: string
+          enum: [CONFORMING, JUMBO, JUMBO_ONLY]
+          description: "Loan amount range the officer handles"
+          default: CONFORMING
+        productsProvided:
+          type: array
+          items:
+            type: string
+          description: "Mortgage products offered (e.g. ['30Yr Fixed', '7Yr ARM'])"
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        company:
+          type: string
+          description: "Company/brokerage name"
+        credentialId:
+          type: string
+          description: "Keycloak/SSO credential ID"
+
+    # ─── Lead ───
+
+    Lead:
+      description: "Mortgage lead submitted by a borrower"
+      type: object
+      required: [loanPurpose, loanAmount, homeValue, state, zipCode]
+      properties:
+        borrowerId:
+          type: string
+          format: uuid
+          description: "FK to Borrower"
+        loanPurpose:
+          type: string
+          enum: [PURCHASE, REFINANCE]
+          description: "Purpose of the loan"
+        loanAmount:
+          type: number
+          minimum: 50000
+          maximum: 10000000
+          description: "Desired loan amount (USD)"
+          examples: [500000, 1200000]
+        homeValue:
+          type: number
+          minimum: 50000
+          maximum: 50000000
+          description: "Estimated property value (USD)"
+          examples: [625000]
+        state:
+          type: string
+          description: "Property state (2-letter code)"
+          examples: ["CA"]
+        zipCode:
+          type: string
+          minLength: 5
+          maxLength: 10
+          description: "Property ZIP code"
+          examples: ["94105"]
+        homeDescription:
+          type: string
+          enum: [SINGLE_FAMILY, CONDO, TOWNHOUSE, MULTI_FAMILY, MANUFACTURED]
+          description: "Property type"
+        residenceType:
+          type: string
+          enum: [PRIMARY, SECOND_HOME, INVESTMENT]
+          description: "How the property will be used"
+          default: PRIMARY
+        loanType:
+          type: string
+          enum: [CONVENTIONAL, FHA, VA, USDA, JUMBO, NON_QM]
+          description: "Type of mortgage loan"
+        loanQualifyType:
+          type: string
+          enum: [QM, NON_QM]
+          description: "Qualified Mortgage vs Non-Qualified Mortgage"
+          default: QM
+        creditScoreRange:
+          type: string
+          enum: [EXCELLENT, GOOD, FAIR, POOR, UNKNOWN]
+          description: "Credit score range"
+          default: UNKNOWN
+        employmentStatus:
+          type: string
+          enum: [EMPLOYED, SELF_EMPLOYED, RETIRED, UNEMPLOYED, OTHER]
+          description: "Employment status"
+        annualHouseholdIncome:
+          type: string
+          enum: [LESS_THAN_50K, 50K_100K, 100K_200K, 200K_400K, OVER_400K]
+          description: "Annual household income range"
+        mortgageProducts:
+          type: string
+          description: "Preferred mortgage products (comma-separated, e.g. '30Yr Fixed, 7Yr ARM')"
+          examples: ["30Yr Fixed, 15Yr Fixed"]
+        message:
+          type: string
+          maxLength: 2000
+          description: "Free-text message from borrower (special requests, context)"
+        referenceCode:
+          type: string
+          description: "Referral/promotion code"
+        languages:
+          type: string
+          description: "Preferred language(s)"
+        leadAvailability:
+          type: string
+          enum: [AVAILABLE, POPULAR, FULL, CLOSED]
+          description: "Lead availability status for loan officers"
+          default: AVAILABLE
+        # Purchase-specific fields
+        hasRealEstateAgent:
+          type: boolean
+          description: "Already have a real estate agent? (PURCHASE only)"
+        needRealEstateAgent:
+          type: boolean
+          description: "Want agent recommendation? (PURCHASE only)"
+        firstTimeHomeBuyer:
+          type: boolean
+          description: "First-time home buyer? (PURCHASE only)"
+        propertyPurchaseSituation:
+          type: string
+          enum: [LOOKING, SIGNED_CONTRACT, IN_ESCROW, READY_TO_CLOSE]
+          description: "Purchase timeline (PURCHASE only)"
+        # Refinance-specific fields
+        currentMortgageRate:
+          type: number
+          minimum: 0
+          maximum: 20
+          description: "Existing mortgage interest rate (REFINANCE only)"
+          examples: [4.5]
+        haveSecondMortgage:
+          type: boolean
+          description: "Has second mortgage/HELOC? (REFINANCE only)"
+        secondLoanAmount:
+          type: number
+          description: "Second mortgage balance (REFINANCE only)"
+        additionalLoanAmount:
+          type: number
+          description: "Cash-out amount desired (REFINANCE only)"
+        currentMortgageProduct:
+          type: string
+          enum: [CONVENTIONAL, FHA, VA, USDA, JUMBO, ARM, INTEREST_ONLY, UNKNOWN]
+          description: "Existing mortgage product (REFINANCE only)"
+
+    # ─── Quote & Response ───
+
+    Quote:
+      description: "Loan officer's response to a lead"
+      type: object
+      required: [loanOfficerId, leadId]
+      properties:
+        loanOfficerId:
+          type: string
+          format: uuid
+        leadId:
+          type: string
+          format: uuid
+        productQuotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductQuote"
+
+    ProductQuote:
+      description: "A specific mortgage product offer within a quote"
+      type: object
+      required: [mortgageProduct, interestRate]
+      properties:
+        mortgageProduct:
+          type: string
+          enum: [30YR_FIXED, 20YR_FIXED, 15YR_FIXED, 10YR_FIXED,
+                 7YR_ARM, 5YR_ARM, 3YR_ARM, INTEREST_ONLY, BALLOON]
+          description: "Mortgage product type"
+        interestRate:
+          type: number
+          minimum: 0
+          maximum: 20
+          description: "Interest rate (%)"
+          examples: [6.5, 5.875]
+        cost:
+          type: number
+          description: "Total closing cost (USD)"
+          examples: [3500, 0]
+        credit:
+          type: number
+          description: "Lender credit toward closing cost (USD)"
+          examples: [1500, 0]
+        message:
+          type: string
+          maxLength: 500
+          description: "Loan officer's note about this product"
+
+    LeadAction:
+      description: "Status change event on a lead"
+      type: object
+      required: [leadId, leadStatus]
+      properties:
+        loanOfficerId:
+          type: string
+          format: uuid
+        borrowerId:
+          type: string
+          format: uuid
+        leadId:
+          type: string
+          format: uuid
+        leadStatus:
+          type: string
+          enum: [OPEN, ASSIGNED, QUOTED, FUNDED]
+          description: "Current lead status"
+
+    # ─── Distribution ───
+
+    LeadAssignment:
+      description: "Push-model assignment of a lead to a loan officer"
+      type: object
+      required: [leadId, loanOfficerId]
+      properties:
+        leadId:
+          type: string
+          format: uuid
+        loanOfficerId:
+          type: string
+          format: uuid
+
+    # ─── Subscription ───
+
+    Subscription:
+      description: "Loan officer subscription plan"
+      type: object
+      required: [loanOfficerId, wixPlanId, startTime]
+      properties:
+        loanOfficerId:
+          type: string
+          format: uuid
+        wixOrderId:
+          type: string
+          description: "Wix order reference"
+        wixPlanId:
+          type: string
+          description: "Wix plan identifier"
+        emailOfSubscription:
+          type: string
+          format: email
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        isCancelled:
+          type: boolean
+          default: false
+        subscribeModel:
+          type: string
+          enum: [PUSH, PREPAID]
+          description: "Subscription model"

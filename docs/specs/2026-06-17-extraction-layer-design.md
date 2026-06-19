@@ -22,7 +22,7 @@
 
 Extraction answers: *"What specific data does the user provide?"*
 
-Intent classification determines *what the user wants to do* (e.g., `get_quote`). Extraction pulls the structured data from the utterance — property type, address, coverage amount — and validates it before handing it to Layer 2 (DECIDE).
+Intent classification determines *what the user wants to do* (e.g., `submit_lead`). Extraction pulls the structured data from the utterance — loan purpose, address, home value — and validates it before handing it to Layer 2 (DECIDE).
 
 Extraction is the second half of Layer 1 (UNDERSTAND):
 
@@ -117,11 +117,11 @@ The Extract node operates on a **per-state scope** — not the full domain model
 **Scope resolution:**
 
 ```
-agentState.phase = "collect_property_info"
+agentState.phase = "collect_lead_purpose"
        │
        ▼
-x-state-bindings[collect_property_address]:
-  entity: HomeInsurance
+x-state-bindings[collect_lead_purpose]:
+  entity: Lead
   fields: [home_address]                     ← only this sub-schema
        │
        ▼
@@ -134,7 +134,7 @@ LLM 1 receives ONLY Address schema:
   5 fields, not 30+
 ```
 
-**Why not the full HomeInsurance schema (all 30+ fields) for LLM 1:**
+**Why not the full Lead schema (all 30+ fields) for LLM 1:**
 
 | Approach | Tokens | Accuracy | Risk |
 |----------|--------|----------|------|
@@ -295,11 +295,11 @@ Regardless of implementation option, the Extract node receives `StateContext`:
 
 ```
 StateContext {
-  state_name:        string    // e.g., "collect_property_info"
+  state_name:        string    // e.g., "collect_lead_purpose"
   state_description: string    // what this state expects
   state_hint:        string    // disambiguation instruction from node metadata
   required_fields:   string[]  // list of field names
-  phase:             string    // current agentState.phase (e.g., "collect_property_info", "validate_property_info", "confirm_details")
+  phase:             string    // current agentState.phase (e.g., "collect_lead_purpose", "validate_lead", "confirm_details")
 }
 ```
 
@@ -352,11 +352,11 @@ class ProvideInformationIntentPayload(ExtractedIntentPayload):
     field_values: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
-class GetQuoteIntentPayload(ExtractedIntentPayload):
+class LeadPayload(ExtractedIntentPayload):
     field_values: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
-class FileClaimIntentPayload(ExtractedIntentPayload):
+class RateCheckPayload(ExtractedIntentPayload):
     field_values: dict[str, Any] = field(default_factory=dict)
 ```
 
@@ -374,8 +374,8 @@ class ExtractionResult:
 | `ConfirmIntentPayload` | `confirm` | `fields: dict[str, bool]` |
 | `DeclineIntentPayload` | `decline` | `fields: dict[str, bool]` |
 | `ProvideInformationIntentPayload` | `provide_information` | `field_values: dict[str, Any]` |
-| `GetQuoteIntentPayload` | `get_quote` | `field_values: dict[str, Any]` |
-| `FileClaimIntentPayload` | `file_claim` | `field_values: dict[str, Any]` |
+| `LeadPayload` | `submit_lead` | `field_values: dict[str, Any]` |
+| `RateCheckPayload` | `check_rates` | `field_values: dict[str, Any]` |
 
 Intents `ask_question` and `unrecognized_intent` skip extraction entirely and route directly to their respective Layer 3 nodes.
 
@@ -387,9 +387,9 @@ After the Extract node produces payloads, a guardrail validates each `field_valu
 
 ```python
 VALID_AGENT_FIELDS: set[str] = {
-    "policy_type", "property_type", "address", "postal_code",
-    "building_age", "floor_area", "coverage_amount", "phone",
-    "claim_type", "claim_description", ...
+    "loan_purpose", "address", "postal_code",
+    "loan_amount", "home_value", "mortgage_product", "phone",
+    "interest_rate", "credit_score", ...
 }
 
 def validate_payload_fields(payload: ExtractedIntentPayload):
@@ -412,8 +412,8 @@ INTENT_PAYLOAD_MAP = {
     "confirm":              ConfirmIntentPayload,
     "decline":              DeclineIntentPayload,
     "provide_information":  ProvideInformationIntentPayload,
-    "get_quote":            GetQuoteIntentPayload,
-    "file_claim":           FileClaimIntentPayload,
+    "submit_lead":          LeadPayload,
+    "check_rates":          RateCheckPayload,
 }
 
 def build_extraction_result(msg_id: str, intent_payloads: list) -> ExtractionResult:
@@ -434,14 +434,14 @@ The LLM prompt must guide extraction so that:
 
 **Multi-intent example:**
 
-> User: "I want to file a claim, my phone is 123-456-7890"
+> User: "I want to check rates, my phone is 123-456-7890"
 
 ```json
 {
   "msg_id": "a1b2c3d4",
   "payloads": [
     {
-      "intent": "file_claim",
+      "intent": "check_rates",
       "confidence": 0.95,
       "field_values": {}
     },
@@ -625,78 +625,78 @@ TransformOperation {
 
 ```yaml
 extraction_nodes:
-  collect_property_info_extract:
+  collect_lead_purpose_extract:
     extract_strategy: hybrid      # Option A: llm_primary | Option B: deterministic | Option C: hybrid
     validate_strategy: durable_rules  # Option A: durable_rules | business_rules | pyknow
-                                      # Option B: native | Option C: pydantic
+                                       # Option B: native | Option C: pydantic
     transform_strategy: hybrid    # Option A: deterministic | Option B: llm_assisted | Option C: hybrid
     state_hint: >
-      The user is providing property information for a home insurance quote.
+      The user is providing lead information for a mortgage lead.
       Address may include street, city, province, postal code.
-      Building age is in years.
+      Loan amount is in dollars.
     context_window_size: 6
     max_transform_attempts: 2
-    on_transform_failure: ask_missing_property_info
+    on_transform_failure: ask_missing_lead_info
 
     extraction_rules:
-      - field: property_type
-        description: "Type of property (apartment, house, villa)"
+      - field: loan_purpose
+        description: "Purpose of the loan (purchase, refinance, home_equity)"
         type: enum
         required: true
-        fallback_keywords: [apartment, house, villa, condo, flat]
-        examples: ["I live in a house", "a 3-bedroom apartment"]
+        fallback_keywords: [purchase, refinance, home_equity, cash_out, buy]
+        examples: ["I want to buy a home", "refinance my mortgage"]
       - field: postal_code
         description: "6-digit postal code"
         type: string
         required: true
         fallback_pattern: "\\b[0-9]{6}\\b"
-      - field: building_age
-        description: "Age of the building in years"
+      - field: loan_amount
+        description: "Loan amount in dollars"
         type: int
         required: true
-        examples: ["built in 2010", "15 years old"]
-      - field: floor_area
-        description: "Floor area in square meters"
-        type: float
+        examples: ["borrowing 350000", "$500k loan"]
+      - field: home_value
+        description: "Estimated home value in dollars"
+        type: int
         required: false
-        fallback_pattern: "\\b([0-9]+(?:\\.[0-9]+)?)\\s*(?:sqm|m2|square\\s*meters?)"
+        fallback_pattern: "\\$?([0-9,]+(?:\\.[0-9]+)?)\\s*(?:k|K|thousand)?"
 
     validation_rules:
-      property_type:
+      loan_purpose:
         required: true
-        enum: [apartment, house, villa]
+        enum: [purchase, refinance, home_equity]
       postal_code:
         required: true
         regex: "^[0-9]{6}$"
-      building_age:
+      loan_amount:
         required: true
         type: int
-        range: { min: 0, max: 200 }
-      floor_area:
-        type: float
-        range: { min: 1, max: 100000 }
+        range: { min: 10000, max: 10000000 }
+      home_value:
+        type: int
+        range: { min: 10000, max: 50000000 }
 
     transform_rules:
-      property_type:
+      loan_purpose:
         - type: normalize
           config: { op: lowercase }
         - type: lookup
           config:
             mapping:
-              condo: apartment
-              flat: apartment
-              "single family": house
-      building_age:
+              buy: purchase
+              "cash out": cash_out
+              "home equity": home_equity
+      loan_amount:
         - type: cast
           config: { to: int }
         - type: llm_correct
           config:
             prompt: >
-              Convert building age to integer years. "built in 2010" → current_year - 2010.
-              "new" → 0. Current value: {value}
-      floor_area:
+              Convert loan amount to integer dollars. "$500k" → 500000.
+              "350 thousand" → 350000. Current value: {value}
+      home_value:
         - type: cast
-          config: { to: float }
+          config: { to: int }
 ```
 
 ### 6.5 Strategy Configuration Reference
@@ -750,11 +750,11 @@ Layer 2: DECIDE
 
 ### 7.2 Intent → Extraction Routing
 
-1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `get_quote` routes to `collect_property_info_extract`; `file_claim` routes to `file_claim_extract`.
+1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `submit_lead` routes to `collect_lead_purpose_extract`; `check_rates` routes to `collect_financial_profile_extract`.
 
 2. **Intent may skip extraction**: If the intent is `unrecognized_intent` or `ask_question`, extraction skips entirely and routes directly to a clarification or Q&A node.
 
-3. **Multi-intent per message**: A single user message may carry multiple intents (e.g., `file_claim` + `provide_information`). The Extract node produces one `ExtractedIntentPayload` per intent. Simple intents (non-`complex`) may be combined freely; multiple complex intents in one message are rejected by the combination validator before extraction begins.
+3. **Multi-intent per message**: A single user message may carry multiple intents (e.g., `check_rates` + `provide_information`). The Extract node produces one `ExtractedIntentPayload` per intent. Simple intents (non-`complex`) may be combined freely; multiple complex intents in one message are rejected by the combination validator before extraction begins.
 
 ### 7.3 Design Decision: Why Separate Classify and Extract
 
@@ -772,14 +772,14 @@ Layer 2: DECIDE
 
 The extraction prompt must include field descriptions, validation rules, and few-shot examples for every field. In a combined call, the LLM faces the union of all schemas:
 
-- `get_quote` has fields `{property_type, address, postal_code, building_age, floor_area}`
-- `file_claim` has fields `{claim_type, damage_description, incident_date, incident_location}`
-- `update_policy` has fields `{policy_number, coverage_amount, effective_date}`
+- `submit_lead` has fields `{loan_purpose, address, postal_code, loan_amount, home_value}`
+- `check_rates` has fields `{mortgage_product, interest_rate, credit_score}`
+- `update_application` has fields `{application_number, loan_amount, closing_date}`
 
 A combined prompt containing all 3 schemas (~12+ fields) causes the LLM to:
-1. Confuse field boundaries — extract `damage_description` into a `get_quote` payload
+1. Confuse field boundaries — extract `interest_rate` into a `submit_lead` payload
 2. Miss narrow-schema fields amidst the noise
-3. Produce ambiguous output for overlapping concept names ("address" could be property or incident)
+3. Produce ambiguous output for overlapping concept names ("address" could be property or borrower)
 
 Two stages eliminate this: classify first to scope the schema, extract with only that schema. Accuracy is the non-negotiable dimension — one wrong field can route the entire Layer 2 workflow incorrectly. The cost of an extra LLM call is negligible compared to the cost of a business-logic error.
 
@@ -789,7 +789,7 @@ Two stages eliminate this: classify first to scope the schema, extract with only
 
 ## 8. Pattern: Two-Stage Extraction (Type-First)
 
-For scenarios where the extraction schema depends on a prior decision (e.g., auto vs home insurance):
+For scenarios where the extraction schema depends on a prior decision (e.g., purchase vs refinance mortgage):
 
 ```
 Stage 1:
@@ -821,7 +821,7 @@ User corrects a previously filled field ("Wait, the address is not X, it's Y"). 
 
 ### 9.4 Ambiguous Values
 
-When a raw value could map to multiple valid options (e.g., "basic" = `coverage_level` or `deductible`), the `state_hint` disambiguates. If ambiguity persists, Validate reports error → Transform corrects or fail node clarifies.
+When a raw value could map to multiple valid options (e.g., "basic" = `mortgage_product` or `credit_score`), the `state_hint` disambiguates. If ambiguity persists, Validate reports error → Transform corrects or fail node clarifies.
 
 ---
 
@@ -910,6 +910,6 @@ Periodic exports from `llm_audit` can feed into model fine-tuning pipelines or e
 - [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — parent architecture document
 - [Intent Classification Design](./2026-06-16-intent-classification-design.md) — Layer 1 intent classification
 - [State Machine Design](./2026-06-16-state-machine-design.md) — state context injection, intent+state resolution
-- [Home Insurance Workflow](../../examples/home-insurance/workflow.yaml) — reference extraction rules
+- [Mortgage Lead Workflow](../../examples/mortgage-lead/workflow.yaml) — reference extraction rules
 - zelkim/langgraph-insurance-chatbot — two-phase dynamic schema + LLM-structured-output pattern
 - Prodigal Payment Collection Agent — hybrid LLM + per-slot regex fallback pattern

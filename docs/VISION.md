@@ -245,4 +245,10 @@ docs/examples/home-insurance/
 ├── intent-definitions.md
 ├── e2e-scenarios.md
 └── audit-log-sample.json
+
+docs/examples/mortgage-lead/
+├── README.md
+├── workflow.yaml
+├── intent-definitions.md
+└── e2e-scenarios.md
 ```

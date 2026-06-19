@@ -2,7 +2,7 @@
 
 > Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
 > Focused on: Intent classification within the UNDERSTAND layer.
-> All concrete intent examples have been extracted to [examples/home-insurance/](../../examples/home-insurance/).
+> All concrete intent examples have been extracted to [examples/mortgage-lead/](../../examples/mortgage-lead/).
 
 ---
 
@@ -102,9 +102,9 @@ system_intents:
     description: User asks for information or explanation
     keywords: [what is, how does, tell me about, explain, why, when did, where is, who is, can you tell]
     examples:
-      - "What is my deductible?"
-      - "How does the claims process work?"
-      - "Tell me about coverage options"
+      - "What is the current interest rate?"
+      - "What are current mortgage rates?"
+      - "Tell me about loan options"
 
   - name: provide_information
     description: User provides data in response to a prompt
@@ -152,7 +152,7 @@ system_intents:
     examples:
       - "No, I meant 456 Oak Street, not 123 Main"
       - "That's wrong, my phone is 555-9999"
-      - "Actually, I changed my mind — make it $500k coverage"
+      - "Actually, I changed my mind — make it $500k loan amount"
 
   - name: ambiguous_request
     description: Utterance maps to multiple possible intents; needs disambiguation
@@ -204,7 +204,7 @@ system_intents:
 
 ### 2.2 Custom Intents (per-workflow)
 
-Each workflow can define additional domain-specific intents. For a complete catalog of home insurance intents with keywords and examples, see [intent-definitions.md](../../examples/home-insurance/intent-definitions.md). The framework uses the same `IntentDef` schema for both system and custom intents.
+Each workflow can define additional domain-specific intents. For a complete catalog of mortgage lead intents with keywords and examples, see [intent-definitions.md](../../examples/mortgage-lead/intent-definitions.md). The framework uses the same `IntentDef` schema for both system and custom intents.
 
 ### 2.3 Intent Definition Schema
 
@@ -226,22 +226,23 @@ intents:
       - "tell me about"
       - "explain"
     examples:
-      - "What is my deductible?"
-      - "How does the claims process work?"
-      - "Tell me about coverage options"
+      - "What is the current interest rate?"
+      - "What are current mortgage rates?"
+      - "Tell me about loan options"
 
-  - name: "get_quote"
-    description: "User requests a new insurance quote"
+  - name: "submit_lead"
+    description: "User submits a new mortgage lead"
     complex: true
     keywords:
-      - "quote"
-      - "get a price"
-      - "how much"
-      - "estimate"
+      - "apply"
+      - "submit"
+      - "mortgage"
+      - "refinance"
+      - "new loan"
     examples:
-      - "I want a quote for home insurance"
-      - "How much would it cost to insure my house?"
-      - "Give me a price estimate"
+      - "I want to submit a mortgage application"
+      - "I want to apply for a home loan"
+      - "Can you help me get a mortgage?"
 ```
 
 ### 2.4 Classification Strategy
@@ -294,7 +295,7 @@ Intent classification is not a single-message operation. The LLM prompt must inc
 
 The framework includes the **last 3 user messages + last 3 agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
 
-> **Note:** Intent classification input also includes `agentState.phase` (e.g., `collect_property_info`, `file_claim`, `collect_coverage_needs`). The current workflow phase provides state-aware context that helps the classifier disambiguate intents — for example, "I want to change that" in the `collect_property_info` phase likely refers to modifying property details, while in the `file_claim` phase it likely refers to updating claim information.
+> **Note:** Intent classification input also includes `agentState.phase` (e.g., `collect_lead_purpose`, `check_rates`, `collect_financial_profile`). The current workflow phase provides state-aware context that helps the classifier disambiguate intents — for example, "I want to change that" in the `collect_lead_purpose` phase likely refers to modifying loan amount, while in the `check_rates` phase it likely refers to getting current rates.
 
 ### 3.2 Edge Case Coverage
 
@@ -348,7 +349,7 @@ The `source` field indicates which classifier produced the result, enabling down
 
 ### 4.2 Multi-Intent Output
 
-A single user utterance may carry multiple intents ("I want to file a claim, my phone is 123-456-7890"). The classifier returns a list of `ClassifiedIntent` objects:
+A single user utterance may carry multiple intents ("I want to check rates, my phone is 123-456-7890"). The classifier returns a list of `ClassifiedIntent` objects:
 
 ```
 ClassificationResult {
@@ -362,7 +363,7 @@ ClassificationResult {
 {
   "intents": [
     {
-      "intent": "file_claim",
+      "intent": "check_rates",
       "confidence": 0.95,
       "source": "llm"
     },
@@ -370,7 +371,7 @@ ClassificationResult {
       "intent": "provide_information",
       "confidence": 0.88,
       "source": "llm",
-      "reasoning": "User provided phone number alongside claim intent"
+      "reasoning": "User provided phone number alongside rate check intent"
     }
   ]
 }
@@ -461,7 +462,7 @@ Each custom intent maps to exactly **0 or 1 agent**, determined by its operation
 
 > Write operations NEVER go through an agent. They execute as deterministic state machine transitions.
 
-> **Example — Home Insurance:** `get_quote` → state machine (`GetQuoteIntentPayload`), `file_claim` → state machine (`FileClaimIntentPayload`), `check_coverage` → ReadOnlyAgent (`CheckCoverageIntentPayload`), `ask_about_claim_status` → ReadOnlyAgent (`AskClaimStatusIntentPayload`).
+> **Example — Mortgage Lead:** `submit_lead` → state machine (`LeadPayload`), `check_rates` → ReadOnlyAgent (`RateCheckPayload`), `check_application_status` → ReadOnlyAgent (`ApplicationStatusPayload`).
 
 ### 5.3 Intent Analysis Prompt Guidelines
 
@@ -472,7 +473,7 @@ When the LLM analyzes a user message, it should:
 3. Return an `ClassifiedIntent` for EACH detected intent with its own confidence score
 4. Do not merge data from different intents into a single payload
 
-**Example:** "I want to file a claim, my phone is 123-456-7890" produces TWO payloads — one `FileClaimIntentPayload` (no data) + one `ProvideInformationIntentPayload` (phone number).
+**Example:** "I want to check rates, my phone is 123-456-7890" produces TWO payloads — one `RateCheckPayload` (no data) + one `ProvideInformationIntentPayload` (phone number).
 
 ### 5.4 Confidence Threshold Calibration
 
