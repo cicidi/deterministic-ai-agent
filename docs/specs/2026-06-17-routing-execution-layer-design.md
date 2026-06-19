@@ -293,8 +293,8 @@ Decision nodes answer: *"Which path should the workflow take next?"* — beyond 
 
 Examples:
 - Risk triage: `risk_score > 80 → manual_review` / `risk_score ≤ 80 → auto_approve`
-- Fraud detection: anomaly patterns trigger `fraud_review` branch
-- Product routing: `product_type == "auto"` routes to auto-specific extraction
+- Fraud detection: anomaly patterns trigger `manual_review` branch
+- Coverage routing: `coverage_type == "basic"` routes to `calculate_basic_premium`
 
 ### 3.2 Implementation Options
 
@@ -381,7 +381,7 @@ Framework runs evals on each LLM decision model change. Must pass ≥ 95% of eva
 | Coverage | Closed-world rules | Closed-world rules |
 | Unhandled case | Default route | Error → escalate |
 | Auditability | Full | Full |
-| Use case | Most production | High-security (payments, healthcare) |
+| Use case | Most production | High-security (claims, PII data) |
 
 ---
 
@@ -475,7 +475,7 @@ phases:
 
 **Sub-workflows are the definition language for A2A (Agent-to-Agent) communication.** They define *what* agents communicate and *how* they coordinate — the inputs, outputs, permissions, and execution contracts between agents. See [A2A Protocol spec](./2026-06-17-a2a-protocol.md) for the runtime protocol that sub-workflows execute over (agent discovery, capability negotiation, task lifecycle, message formats).
 
-Sub-workflows are **complete, standalone workflows** with the same structure as the super workflow — their own domain model (entities, states, transitions), permission model, retry budgets, and routing. Shared capabilities (RAG FAQ, identity verification, payment processing) are defined once and invoked from any state in any parent workflow.
+Sub-workflows are **complete, standalone workflows** with the same structure as the super workflow — their own domain model (entities, states, transitions), permission model, retry budgets, and routing. Shared capabilities (RAG FAQ, property verification, claim processing) are defined once and invoked from any state in any parent workflow.
 
 This prevents the zelkim anti-pattern where RAG logic is duplicated across conversational and transactional branches.
 
@@ -619,11 +619,11 @@ handle_question_in_quote:
   on_return: collect_property_info
 
 # Async invocation
-background_kyc_check:
+background_risk_check:
   executor: sub_workflow
-  sub_workflow: identity_verification
+  sub_workflow: property_verification
   mode: async
-  on_complete: kyc_result_received     # callback when async sub-workflow finishes
+  on_complete: risk_result_received     # callback when async sub-workflow finishes
 ```
 
 ### 5.5 Sub-Workflow Nesting
@@ -783,8 +783,8 @@ error_handling:
 
 # Per-node override
 nodes:
-  process_payment:
-    error_node: escalate_to_human  # payment errors always go to human
+  process_claim_payment:
+    error_node: escalate_to_human  # claim payment errors always go to human
   calculate_premium:
     error_node: fallback_value     # use default rate on calculation failure
 ```
@@ -811,7 +811,7 @@ After `errorNode` handles the error, the conversation resumes from the state tha
 permission:
   allowed_tools:
     - calculate_premium_api        # read: can call premium calculation
-    - payment_gateway_api          # dangerous_operation_write: can process payments
+    - claims_gateway_api            # dangerous_operation_write: can process claims
     - vector_search_mcp            # read: can query knowledge base
   allowed_transitions:
     - assess_risk
@@ -833,11 +833,11 @@ tools:
     endpoint: POST /api/v1/premium/calculate
     timeout_ms: 5000
 
-  payment_gateway_api:
+  claims_gateway_api:
     type: api
     access_level: dangerous_operation_write
-    description: "Process payment through the payment gateway"
-    endpoint: POST /api/v1/payment/charge
+    description: "Process claim through the claims gateway"
+    endpoint: POST /api/v1/claims/submit
     timeout_ms: 15000
     requires_approval: true       # human-in-the-loop gate
 
@@ -886,7 +886,7 @@ ToolResult:
 | `read` | Vector search, premium calculation, policy lookup | None |
 | `write` | Save quote, update profile, log event | Audit trail |
 | `sensitive_data_read` | View PII, medical records, credit score | OAuth scope + audit |
-| `dangerous_operation_write` | Process payment, cancel policy, delete data | Human approval gate + OAuth + audit |
+| `dangerous_operation_write` | Process claim, cancel policy, delete data | Human approval gate + OAuth + audit |
 
 ### 7.6 OAuth / Role-Based Enforcement
 

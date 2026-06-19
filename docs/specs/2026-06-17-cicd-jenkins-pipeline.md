@@ -611,39 +611,39 @@ eval:
 
 ---
 
-## 5. Real Project Example: mrratequote
+## 5. Real Project Example: home_insurance
 
 ### 5.1 Overview
 
-**mrratequote** is a mortgage rate quote system. The chat version routes users through a mortgage quote workflow: collect property details → gather financial info → run credit check → present rate options.
+**home_insurance** is a home insurance quote system. The chat version routes users through a home insurance quote workflow: collect property details → gather property info → run risk assessment → present quote options.
 
 ```
-User: "What's the best rate for a $500K mortgage?"
+User: "What's the best quote for a $500K home insurance policy?"
     │
     ▼
-Layer 1 (Extract): { intent: "get_mortgage_rate", loan_amount: 500000 }
-Layer 2 (Route): mortgage_rate_quote workflow → collect_financial_info phase
-Layer 3 (Respond): "I'd be happy to find rates for a $500K loan. First, let me ask..."
+Layer 1 (Extract): { intent: "get_home_insurance_quote", coverage_amount: 500000 }
+Layer 2 (Route): home_insurance_quote workflow → collect_property_info phase
+Layer 3 (Respond): "I'd be happy to find a quote for $500K coverage. First, let me ask..."
 ```
 
 ### 5.2 Backend Integration
 
-The framework's chat version calls mrratequote's backend API for rate calculations:
+The framework's chat version calls home_insurance's backend API for quote calculations:
 
 ```yaml
 # workflow integration configuration
 workflows:
-  mortgage_rate_quote:
+  home_insurance_quote:
     backend:
-      api: mrratequote
-      base_url: "https://mrratequote-api.${ENV}.example.com"
+      api: home_insurance
+      base_url: "https://home-insurance-api.${ENV}.example.com"
       auth:
         type: api_key
-        key: "${MRRATEQUOTE_API_KEY}"
+        key: "${HOME_INSURANCE_API_KEY}"
       endpoints:
-        submit_application: "POST /v1/applications"
-        get_rates:            "GET  /v1/rates"
-        run_credit_check:     "POST /v1/credit-check"
+        submit_quote_application: "POST /v1/quote-applications"
+        get_quote:                "GET  /v1/quote"
+        run_risk_assessment:      "POST /v1/risk-assessment"
       timeout_seconds: 10
       retry:
         max_attempts: 2
@@ -653,46 +653,46 @@ workflows:
         recovery_timeout_seconds: 30
 ```
 
-### 5.3 Eval Dataset for mrratequote
+### 5.3 Eval Dataset for home_insurance
 
 ```yaml
 eval:
   suites:
-    mortgage_rate_quote:
-      dataset: mortgage-rate-quote-eval
+    home_insurance_quote:
+      dataset: home-insurance-quote-eval
       test_cases:
-        - name: "happy_path_full_rate_quote"
-          input: "I'm looking for a mortgage rate on a $500,000 home with 20% down"
+        - name: "happy_path_home_insurance_quote"
+          input: "I'm looking for a home insurance quote for a $500,000 home with a $1,000 deductible"
           expected:
-            intent: get_mortgage_rate
+            intent: get_home_insurance_quote
           assert:
-            - extracted.loan_amount == 500000
-            - extracted.down_payment_percent == 20
-            - response_data.rates is not null
+            - extracted.coverage_amount == 500000
+            - extracted.deductible_amount == 1000
+            - response_data.quote is not null
         
-        - name: "insufficient_credit_score"
-          input: "What rate can I get with a 580 credit score?"
+        - name: "high_risk_assessment"
+          input: "Can I get a quote for a property with a risk score of 580?"
           expected:
-            intent: get_mortgage_rate
+            intent: get_home_insurance_quote
           assert:
-            - extracted.credit_score == 580
+            - extracted.risk_score == 580
             - response_data.outcome == "declined"
-            - response_data.reason contains "credit"
+            - response_data.reason contains "risk"
         
-        - name: "jumbo_loan_routing"
-          input: "Need a rate for a $1.2M property in California"
+        - name: "high_value_property_routing"
+          input: "Need a quote for a $1.2M property in California"
           expected:
-            intent: get_mortgage_rate
+            intent: get_home_insurance_quote
           assert:
-            - extracted.loan_amount == 1200000
-            - routing_decision.route == "jumbo_loan_specialist"
+            - extracted.coverage_amount == 1200000
+            - routing_decision.route == "high_value_property_specialist"
         
-        - name: "first_time_buyer_programs"
-          input: "I'm a first-time homebuyer, what special programs do you have?"
+        - name: "first_time_homeowner_programs"
+          input: "I'm a first-time homeowner, what special programs do you have?"
           expected:
-            intent: first_time_buyer_inquiry
+            intent: first_time_homeowner_inquiry
           assert:
-            - extracted.first_time_buyer == true
+            - extracted.first_time_homeowner == true
 ```
 
 ---

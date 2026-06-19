@@ -68,7 +68,7 @@ GAP_THRESHOLD=0.5              # relaxed (50% OK in dev)
 
 # Tools
 ALLOW_DANGEROUS_OPS=true       # skip dangerous_operation approval in dev
-MOCK_EXTERNAL_APIS=true        # mock payment/premium APIs
+MOCK_EXTERNAL_APIS=true        # mock premium/claims APIs
 ```
 
 ### 2.3 `.env.e2e` (CI / eval)
@@ -87,7 +87,7 @@ EVAL_MODE=true
 EVAL_DATASET=home-insurance-eval
 LANGSMITH_TRACING=true         # trace eval runs
 ALLOW_DANGEROUS_OPS=false      # same strictness as prod
-MOCK_EXTERNAL_APIS=true        # mock payment APIs, but test the real logic
+MOCK_EXTERNAL_APIS=true        # mock claims APIs, but test the real logic
 ```
 
 ### 2.4 `.env.prod` (production)

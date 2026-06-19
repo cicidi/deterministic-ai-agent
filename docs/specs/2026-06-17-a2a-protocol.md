@@ -171,7 +171,7 @@ The framework exposes two protocol families. Both are JSON-based, stateless at t
 | **Discovery** | MCP `list_tools` | Agent Registry `discover` |
 | **Response** | ToolResult { success, data } | AgentResult { status, results, audit } |
 | **Auth** | MCP server-level auth | Inherited from caller's UserContext |
-| **Example** | `calculate_premium(params)` | "Process a payment for this quote → agent_payment" |
+| **Example** | `calculate_premium(params)` | "Process a claim for this policy → agent_claims" |
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -211,7 +211,7 @@ protocols:
     enabled: true
     servers:                          # see Tool Ecosystem spec §7
       knowledge_base: ...
-      payment_gateway: ...
+      claims_gateway: ...
 
   a2a:
     enabled: true
@@ -281,9 +281,9 @@ a2a:
     static_agents:                    # used when mode=static
       - agent_id: rag_faq
         endpoint: "http://localhost:8001"
-      - agent_id: payment_processor
+      - agent_id: claims_processor
         endpoint: "http://localhost:8002"
-      - agent_id: identity_verification
+      - agent_id: property_verification
         endpoint: "http://localhost:8003"
 ```
 
@@ -314,10 +314,10 @@ states:
 states:
   background_verification:
     executor: a2a_invoke
-    agent: identity_verification
+    agent: property_verification
     mode: async
-    on_complete: kyc_result_received         # callback when async agent finishes
-    on_timeout: proceed_without_kyc          # fallback if async agent doesn't respond
+    on_complete: risk_result_received         # callback when async agent finishes
+    on_timeout: proceed_without_risk_check    # fallback if async agent doesn't respond
 ```
 
 ### 5.2 Sync Flow
@@ -403,10 +403,9 @@ Agents may restrict which callers can invoke them:
 # Agent registry entry with caller allowlist
 agent_registry:
   agents:
-    - agent_id: payment_processor
+    - agent_id: claims_processor
       allowed_callers:
         - home_insurance_quote              # only this workflow can invoke
-        - auto_insurance_quote
       deny_all_others: true
     - agent_id: rag_faq
       allowed_callers: ["*"]                # any agent can invoke
@@ -419,9 +418,9 @@ When an A2A invocation fails, the error routes to `errorNode` following the same
 ```yaml
 # Per-node A2A error configuration
 states:
-  handle_payment:
+  handle_claim:
     executor: a2a_invoke
-    agent: payment_processor
+    agent: claims_processor
     mode: sync
     on_error:
       route_to: errorNode

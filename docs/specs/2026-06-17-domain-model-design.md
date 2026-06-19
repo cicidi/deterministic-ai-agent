@@ -144,9 +144,7 @@ DomainModel {
 
 ```
 docs/domain-models/
-  home-insurance.yaml
-  banking-kYC.yaml
-  healthcare-intake.yaml
+  home-insurance.yaml          # Primary: property, policy, claim entities
 ```
 
 ### 2.2 Registration
@@ -687,11 +685,11 @@ states:
   classify_product:
     entity: insurance_type  # Stage 1
 
-  collect_auto_details:
-    entity: auto_info        # Selected only if product_type == "auto"
+  collect_property_details:
+    entity: property_subtype_info   # Selected only if product_type == "home"
 
-  collect_home_details:
-    entity: property_info    # Selected only if product_type == "home"
+  collect_coverage_details:
+    entity: coverage_info           # Selected after property details complete
 ```
 
 The transition guard on the classify state determines which entity is used next:
@@ -699,11 +697,11 @@ The transition guard on the classify state determines which entity is used next:
 ```yaml
 transitions:
   - from: classify_product
-    to: collect_home_details
+    to: collect_property_details
     guard: "product_type == 'home'"
-  - from: classify_product
-    to: collect_auto_details
-    guard: "product_type == 'auto'"
+  - from: collect_property_details
+    to: collect_coverage_details
+    guard: "context_complete"
 ```
 
 ---
@@ -713,10 +711,10 @@ transitions:
 | # | Question | Impact |
 |---|----------|--------|
 | 1 | Should entities support nested/compound fields (e.g., `address: { street, city, postal_code }`)? | Schema complexity |
-| 2 | Should domain models support inheritance (e.g., `auto_info extends base_insurance_info`)? | Reuse granularity |
+| 2 | Should domain models support inheritance (e.g., `homeowner_policy extends base_policy`)? | Reuse granularity |
 | 3 | For guard expressions — how much expressiveness before we defer to rule engines? | Language complexity vs. power |
 | 4 | Should the domain model include computed fields (fields populated by code, not by user extraction)? | Entity purity |
-| 5 | Cross-domain model references — should an entity in `banking` reference an entity in `kyc`? | Modularity |
+| 5 | Cross-workflow entity references — should an entity in `home_insurance_quote` reference an entity in `home_insurance_claims`? | Modularity |
 | 6 | Migration strategy when a domain model version changes while conversations are in-flight? | Deployment safety |
 
 ---

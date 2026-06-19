@@ -2,7 +2,7 @@
 
 > **Source:** All user prompts across sessions, consolidated into a single reference document.
 > **Purpose:** Authoritative source for checking all spec documents against the user's actual vision, requirements, and constraints.
-> **Last updated:** 2026-06-17
+> **Last updated:** 2026-06-18
 
 ---
 
@@ -109,6 +109,9 @@ Every spec document MUST:
 | 23 | 2026-06-18 | Multi-intent per message + complex flag | Single user message can carry multiple intents; `complex` flag on IntentDef prevents incompatible multi-turn intents from being processed together |
  | 24 | 2026-06-18 | A2A + SDK as tool types (not just executor-level) | Nodes can call other agents as tools (`type: a2a`) alongside API/MCP/command tools; SDK tools (`type: sdk`) for OpenCode/Claude as tools; multi-turn A2A conversations with turn budget; all tool failures route to errorNode |
 | 25 | 2026-06-18 | Spec deduplication & version alignment | Guard expression syntax delegated to state-machine §3.4 (domain-model now cross-references); HLD ToolMeta.type enum synced with child specs; remaining Groovy code removed from CI/CD spec; PII tool catalog entries trimmed to cross-reference response-generation §8 |
+| 26 | 2026-06-18 | Option C (Hybrid) as default + auto-generated Mermaid graph | YAML as single source of truth for workflow definition; Python functions (guards, validators, actions) registered by name and referenced from YAML; framework startup validates all name bindings resolve (drift detection); LangGraph's draw_mermaid_png() auto-generates visual graph snapshot; CI enforces YAML ↔ PNG consistency; non-technical reviewers use PNG for visual audit |
+| 27 | 2026-06-18 | Declarative field mutations (on_entry/on_exit/on_take.set_field) | Every agentState field write is declared in YAML via lifecycle hooks — no hidden code mutations. set_field supports literals, function calls (now(), uuid4()), and field references. Execution order: on_exit → guard eval → on_take → checkpoint → on_entry → main executor. Simple assignments stay in YAML; complex computation stays in Python action functions via output_schema merger. |
+| 28 | 2026-06-18 | SCXML as semantic standard | W3C SCXML Recommendation adopted as the state machine semantic model. YAML workflow definition is a YAML expression of SCXML semantics; no XML file is generated. Full SCXML ↔ YAML mapping documented in state-machine §1.0. SCXML provides compliance/audit reference for regulated industries; LangGraph is the runtime; YAML is the canonical artifact. |
 
 ---
 

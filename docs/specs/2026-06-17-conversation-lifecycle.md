@@ -531,7 +531,7 @@ lifecycle:
 ```
 user_id: "user_456"
   ├── conversation_1 (home_insurance_quote)  → state: active
-  ├── conversation_2 (auto_insurance_quote)  → state: paused
+  ├── conversation_2 (home_insurance_claim)  → state: paused
   └── conversation_3 (claim_filing)          → state: completed
 ```
 

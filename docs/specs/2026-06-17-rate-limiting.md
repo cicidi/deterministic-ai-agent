@@ -111,7 +111,7 @@ rate_limiting:
           window_sec: 60
           window: token_bucket
           burst: 5                  # allow 5 concurrent LLM calls before rate limiting
-        payment_gateway_api:        # Dangerous operations get tighter limits
+        claims_gateway_api:        # Dangerous operations get tighter limits
           requests: 10
           window_sec: 60
         vector_search_mcp:          # Search is cheap, higher limit
@@ -122,7 +122,7 @@ rate_limiting:
           window_sec: 60
 ```
 
-Per-tool limits protect expensive or rate-limited downstream resources. LLM calls are the most expensive (both cost and latency), so they get the tightest limit. Payment operations get tight limits for security and cost reasons.
+Per-tool limits protect expensive or rate-limited downstream resources. LLM calls are the most expensive (both cost and latency), so they get the tightest limit. Claims operations get tight limits for security and cost reasons.
 
 ### 2.5 Combined Enforcement
 
@@ -142,7 +142,7 @@ All pass → request proceeds
 
 ---
 
-Request: user_id=bob, tenant_id=startup_inc, tool=payment_gateway_api
+Request: user_id=bob, tenant_id=startup_inc, tool=claims_gateway_api
 
 Check 1: user_id=bob
   current: 10/60 → PASS
@@ -150,7 +150,7 @@ Check 1: user_id=bob
 Check 2: tenant_id=startup_inc (default tier)
   current: 590/600 → PASS
 
-Check 3: tool=payment_gateway_api
+Check 3: tool=claims_gateway_api
   current: 10/10 → FAIL (limit reached)
 
 → 429 Too Many Requests
@@ -176,7 +176,7 @@ rate_limiting:
       llm_calls_per_min: 30
       max_concurrent_workflows: 10
       tools:
-        payment_gateway_api: { requests: 5, window_sec: 60 }
+        claims_gateway_api: { requests: 5, window_sec: 60 }
         vector_search_mcp: { requests: 100, window_sec: 60 }
 
     premium:
@@ -189,7 +189,7 @@ rate_limiting:
       llm_calls_per_min: 100
       max_concurrent_workflows: 50
       tools:
-        payment_gateway_api: { requests: 30, window_sec: 60 }
+        claims_gateway_api: { requests: 30, window_sec: 60 }
         vector_search_mcp: { requests: 500, window_sec: 60 }
 
     enterprise:
@@ -202,7 +202,7 @@ rate_limiting:
       llm_calls_per_min: 500
       max_concurrent_workflows: 200
       tools:
-        payment_gateway_api: { requests: 100, window_sec: 60 }
+        claims_gateway_api: { requests: 100, window_sec: 60 }
         vector_search_mcp: { requests: 2000, window_sec: 60 }
 
       # Enterprise can also define custom limits
@@ -236,7 +236,7 @@ rate_limiting:
 | Tenant req/min | 600 | 6,000 | 60,000 |
 | LLM calls/min | 30 | 100 | 500 |
 | Concurrent workflows | 10 | 50 | 200 |
-| Payment operations/min | 5 | 30 | 100 |
+| Claims operations/min | 5 | 30 | 100 |
 | Custom limits | ❌ | ❌ | ✅ |
 
 ---
@@ -307,7 +307,7 @@ X-RateLimit-Remaining-Tool: 0
   "message": "Too many requests. Please retry after 30 seconds.",
   "details": {
     "exceeded_dimension": "tool",
-    "exceeded_limit": "payment_gateway_api",
+    "exceeded_limit": "claims_gateway_api",
     "user_id": "bob",
     "tenant_id": "startup_inc",
     "current_usage": {

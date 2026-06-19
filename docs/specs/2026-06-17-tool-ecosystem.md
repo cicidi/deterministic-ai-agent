@@ -346,7 +346,7 @@ g, admin, operator
 
 # Tool access policies
 p, admin, *, *                          # admin: full access
-p, operator, payment_gateway_api, write
+p, operator, claims_gateway_api, write
 p, operator, calculate_premium_api, read
 p, operator, vector_search_mcp, read
 p, analyst, policy_lookup_api, read
@@ -357,8 +357,8 @@ p, user, calculate_premium_api, read
 # Transition access policies
 p, *, collect_property_info, transition
 p, *, collect_coverage_needs, transition
-p, admin, payment_processing, transition
-p, operator, payment_processing, transition
+p, admin, claims_processing, transition
+p, operator, claims_processing, transition
 ```
 
 ### 6.6 Framework Integration
@@ -375,10 +375,10 @@ workflows:
   home_insurance_quote:
     permission:
       engine: native          # simple allowlist, no casbin needed
-  enterprise_payment:
+  enterprise_claims:
     permission:
       engine: pycasbin        # complex role hierarchy
-      model: "config/casbin/payment_model.conf"
+      model: "config/casbin/claims_model.conf"
 ```
 
 ### 6.7 Enforcement Flow
@@ -422,13 +422,13 @@ mcp_servers:
     command: "npx @anthropic/mcp-server-knowledge-base"
     args: ["--db-path", "./kb.sqlite"]
     tools: [search_documents, get_document]
-  payment_gateway:
-    command: "python mcp_servers/payment_server.py"
+  claims_gateway:
+    command: "python mcp_servers/claims_server.py"
     env:
-      API_KEY: "${PAYMENT_API_KEY}"
-    tools: [payment_charge, payment_refund]
+      API_KEY: "${CLAIMS_API_KEY}"
+    tools: [claim_submit, claim_status]
   # Framework auto-discovers tools at startup.
-  # Available tools: vector_search, payment_charge, payment_refund, ...
+  # Available tools: vector_search, claim_submit, claim_status, ...
 ```
 
 ### 7.2 Tool Registration
@@ -637,11 +637,11 @@ A2A tools participate in the existing permission model:
 ```yaml
 # A2A tool with permission configuration
 tools:
-  - name: delegate_payment_to_agent
+  - name: delegate_claim_to_agent
     type: a2a
-    access_level: dangerous_operation_write    # payment processing
+    access_level: dangerous_operation_write    # claims processing
     a2a:
-      agent_id: payment_processor
+      agent_id: claims_processor
       mode: sync
       timeout_ms: 15000
       input_mapping:
@@ -656,9 +656,9 @@ tools:
 nodes:
   process_quote:
     executor: llm
-    tool_allowlist: [calculate_premium_api, delegate_payment_to_agent]
+    tool_allowlist: [calculate_premium_api, delegate_claim_to_agent]
     permission:
-      allowed_tools: [calculate_premium_api, delegate_payment_to_agent]
+      allowed_tools: [calculate_premium_api, delegate_claim_to_agent]
 ```
 
 #### 7.5.5 A2A Tool Error Handling
@@ -671,7 +671,7 @@ tools:
   - name: delegate_verification_to_agent
     type: a2a
     a2a:
-      agent_id: identity_verification
+      agent_id: property_verification
       mode: sync
       timeout_ms: 30000
     retry:
@@ -705,15 +705,15 @@ tools:
 When a downstream agent cannot complete a task in a single response, the calling node (typically an LLM node) can engage in a multi-turn conversation with the agent. The LLM and the downstream agent exchange messages within a bounded turn budget — either completing the task or failing explicitly.
 
 ```
-Calling Node (LLM)                           Downstream Agent (e.g., payment_processor)
+Calling Node (LLM)                           Downstream Agent (e.g., claims_processor)
     │                                              │
     ├── Turn 1: A2A Tool Call ──────────────────→ │
-    │    delegate_payment(amount=500, method=ACH)  │   "Need more info: which account?"
+    │    delegate_claim(amount=500, method=ACH)  │   "Need more info: which account?"
     │←── A2A Response (status: incomplete) ──────┤
     │    { needs_clarification: "account_type" }   │
     │                                              │
     ├── Turn 2: A2A Tool Call (with context) ────→│
-    │    delegate_payment(account_type="checking") │   "Processing payment..."
+    │    delegate_claim(account_type="checking") │   "Processing claim..."
     │←── A2A Response (status: completed) ────────┤
     │    { transaction_id: "tx_123", status: "ok" }│
     │                                              │
@@ -735,11 +735,11 @@ Calling Node (LLM)                           Downstream Agent (e.g., payment_pro
 
 ```yaml
 tools:
-  - name: delegate_payment_to_agent
+  - name: delegate_claim_to_agent
     type: a2a
     access_level: dangerous_operation_write
     a2a:
-      agent_id: payment_processor
+      agent_id: claims_processor
       mode: sync
       timeout_ms: 15000
       max_turns: 5                          # max conversational turns
@@ -791,7 +791,7 @@ nodes:
       clarification, decide whether to provide more context or escalate to
       the user. You have up to 5 turns per agent call.
     tool_allowlist:
-      - delegate_payment_to_agent       # a2a tool with max_turns: 5
+      - delegate_claim_to_agent       # a2a tool with max_turns: 5
       - delegate_verification_to_agent  # a2a tool with max_turns: 3
       - calculate_premium_api            # regular API
     max_llm_tool_calls: 15               # total tool calls across all agents
@@ -1178,8 +1178,8 @@ mcp_servers:
   knowledge_base:
     command: "npx @anthropic/mcp-server-knowledge-base"
     args: ["--db-path", "./kb.sqlite"]
-  payment_gateway:
-    command: "python mcp_servers/payment_server.py"
+  claims_gateway:
+    command: "python mcp_servers/claims_server.py"
     env: { API_KEY: "${PAYMENT_API_KEY}" }
 
 tools:
@@ -1271,7 +1271,7 @@ export:
 
 1. **Should LangFlow components be auto-generated from the domain model YAML, or require manual wiring?** Auto-generation simplifies adoption but risks over-constraining the visual editor experience.
 
-2. **What is the fault-tolerance boundary for MCP tool failures?** When an MCP server (e.g., payment gateway) is unreachable, should the workflow queue the request for retry, fall back to a cached response, or escalate immediately?
+2. **What is the fault-tolerance boundary for MCP tool failures?** When an MCP server (e.g., claims gateway) is unreachable, should the workflow queue the request for retry, fall back to a cached response, or escalate immediately?
 
 3. **How do we version and rollback eval datasets in LangSmith?** Eval results may drift as domain models evolve — do we pin eval datasets to workflow version tags?
 

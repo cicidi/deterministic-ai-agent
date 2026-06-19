@@ -14,6 +14,9 @@
 | 2026-06-16 | 0.5.0 | Extract all examples to examples/home-insurance/; remove invoice/payment appendices; unify on home insurance domain |
 | 2026-06-17 | 0.6.0 | Term consistency (errorNode, agentState.phase); add References section |
 | 2026-06-17 | 0.7.0 | Add Section 1.1: Implementation Approaches (YAML-Only vs Code-First vs Hybrid) |
+| 2026-06-18 | 0.8.0 | Change default recommendation to Option C (Hybrid); add §1.2 registration & lookup mechanism; add §4.1 auto-generated Mermaid visualization + CI snapshot verification |
+| 2026-06-18 | 0.9.0 | Add §3.5 State Lifecycle Actions: declarative field mutations via on_entry/on_exit/on_take.set_field — all agentState writes visible in YAML; expand §3.3 field reference |
+| 2026-06-18 | 1.0.0 | Add §1.0 Semantic Model — SCXML: adopt W3C SCXML Recommendation as the state machine semantic standard; full SCXML ↔ YAML mapping table; YAML as canonical artifact, SCXML for compliance/audit reference |
 
 ---
 
@@ -22,6 +25,39 @@
 > **transitions defines WHAT (business correctness). LangGraph executes HOW (conversation infrastructure).**
 >
 > Developers maintain only the transitions definition. The LangGraph graph, LLM nodes, checkpointing, and interrupt are all auto-generated.
+
+### 1.0 Semantic Model — SCXML
+
+The state machine semantic model follows the **W3C SCXML (State Chart XML) Recommendation** — the W3C standard for statechart-based control abstractions. SCXML defines the complete conceptual vocabulary: states, transitions, entry/exit actions, guards, data model, parallel regions, history, invoke, and send.
+
+Our YAML workflow definition is **a YAML expression of SCXML semantics**, executed on LangGraph. No XML file is generated — the YAML is the canonical artifact. The semantic alignment serves two purposes:
+
+1. **Compliance & Audit:** regulated industries generally can reference a W3C standard to justify state machine correctness
+2. **Conceptual completeness:** SCXML's semantic model is proven and comprehensive; we adopt it wholesale rather than inventing our own
+
+**SCXML ↔ YAML Mapping:**
+
+| SCXML concept | W3C reference | Our YAML |
+|---------------|---------------|----------|
+| `<state>`, `<parallel>`, `<final>` | §3.2 States | `states:` collection |
+| `<transition event="" cond="" target="">` | §3.3 Transitions | `transitions:` with `guard:` and `to:` |
+| `<onentry>` | §3.3.2 | `on_entry: set_field:` |
+| `<onexit>` | §3.3.2 | `on_exit: set_field:` |
+| `cond="expr"` | §3.4 | `guard: "expr"` / `@register_guard` |
+| `<datamodel><data>` | §4 | entities + `agentState.collectedFields` |
+| `<assign location="" expr=""/>` | §4.4 | `set_field: x: "expr"` |
+| `<send event="" target="">` | §3.12 | framework internal (checkpoint events) |
+| `<invoke type="" src="">` | §3.9 | `executor: sub_workflow` |
+| `<parallel>` | §3.8 | parallel composite state + `Send()` |
+| `<history type="shallow\|deep">` | §3.7 | deferred (Appendix C.1 Q5) |
+| `<final>` | §3.2.4 | implicit (no outgoing transitions) |
+| `<log label="" expr="">` | §4.5 | framework auto-checkpoint audit log |
+| `<script>` | §4.6 | not supported — complex logic via Python actions |
+| `<if>`, `<elseif>`, `<else>` | §4.7 | Python guards / YAML guard expressions |
+| `<foreach>` | §4.8 | not supported — iteration via Python actions |
+
+> **Implementation:** `SCXML 1.0` — W3C Recommendation 1 September 2015
+> **Reference:** https://www.w3.org/TR/scxml/
 
 ---
 
@@ -102,9 +138,77 @@ def high_risk_override(ctx: AgentState) -> bool:
     return ctx.risk_score > 80 and ctx.total_claims > 3
 ```
 
-**Pros:** Best of both worlds — YAML for structure/auditability, Python for complex logic. Guards stay readable while supporting arbitrary complexity.
+**Pros:** Best of both worlds — YAML for structure/auditability, Python for complex logic. Guards stay readable while supporting arbitrary complexity. YAML remains the definition; Python code is referenced by name, never drives state transitions directly.
 
-**Cons:** Two artifacts to maintain per workflow. Risk of drift between the YAML declaration and the code implementation.
+**Cons:** Two artifacts to maintain per workflow. Risk of drift between the YAML declaration and the code implementation (mitigated by drift detection at framework startup — see §1.2).
+
+### 1.2 Option C Registration & Lookup Mechanism
+
+Python functions (guards, validators, actions, tool bindings) are registered by name and referenced from YAML.
+
+**Registration:**
+
+```python
+# actions.py
+from framework import register_action
+
+@register_action("compute_premium")
+def compute_premium(ctx: AgentState) -> dict:
+    base = ctx.rate_table.get(ctx.coverage_type)
+    return {"premium": base * ctx.age_factor * ctx.risk_multiplier}
+```
+
+```python
+# guards.py
+from framework import register_guard
+
+@register_guard("high_risk_override")
+def high_risk_override(ctx: AgentState) -> bool:
+    return ctx.risk_score > 80 and ctx.total_claims > 3
+```
+
+```python
+# validators.py
+from framework import register_validator
+
+@register_validator("zip_code_check")
+def zip_code_check(value: str) -> bool:
+    return len(value) == 5 and value.isdigit()
+```
+
+**YAML references names only:**
+
+```yaml
+# workflow.yaml
+states:
+  - name: assess_risk
+    executor: code
+    action: compute_premium              # references @register_action("compute_premium")
+    exit_guard: high_risk_override       # references @register_guard("high_risk_override")
+    output_schema:
+      zip_code:
+        type: str
+        validator: zip_code_check        # references @register_validator("zip_code_check")
+```
+
+**Runtime lookup flow:**
+
+```
+workflow.yaml loaded at startup
+       │
+       ▼
+For each state, for each guard/action/validator name:
+  1. Look up in global registry (dict[str, Callable])
+  2. Match found → bind to node
+  3. Match not found → framework raises StartupError("action 'compute_premium' not registered")
+       │
+       ▼
+If any binding fails → framework refuses to start
+```
+
+**Drift detection:** At startup, the framework validates that every name referenced in YAML resolves to a registered Python function. If any name is unresolved, the framework raises a `StartupError` and refuses to initialize. This guarantees YAML ↔ code consistency at load time, not at runtime.
+
+**Convention:** One Python module per workflow (e.g., `workflows/home_insurance/actions.py`, `guards.py`, `validators.py`). The framework auto-discovers registered functions by scanning the workflow directory at startup. No manual import registration needed — decorators auto-register into the global registry.
 
 ### Comparison Matrix
 
@@ -116,7 +220,7 @@ def high_risk_override(ctx: AgentState) -> bool:
 | **Flexibility** | Low — guard expression language is minimal | High — arbitrary Python for guards/validators | Medium — constrained to YAML structure, flexible on details |
 | **Version Control** | Excellent — single YAML diff tells the whole story | Good — but state machine logic scatters across files | Good — YAML diffs + code diffs must be reviewed together |
 
-**Default recommendation: Option A (YAML-Only) for most use cases.** Use Option C (Hybrid) when guard logic becomes too complex for expression-language guards. Option B (Code-First) is available for teams that prefer Python-native workflows and do not require non-technical auditability.
+**Default recommendation: Option C (Hybrid) — YAML as definition, Python for complex logic.** YAML is always the single source of truth for the workflow structure (states, transitions, schemas, metadata). Complex guard expressions, custom validators, tool bindings, and action functions are implemented in Python and referenced by name from YAML. Option A (YAML-Only) is available for simple workflows where the guard expression language suffices. Option B (Code-First) is available for teams that prefer Python-native workflows and do not require YAML auditability.
 
 ---
 
@@ -127,8 +231,9 @@ def high_risk_override(ctx: AgentState) -> bool:
 For the complete definition format and a concrete home insurance workflow, see [workflow.yaml](../../examples/home-insurance/workflow.yaml). The format supports:
 
 - **states**: typed nodes (`executor: llm | code`) with schemas, guards, metadata, and tool allowlists
-- **transitions**: named edges with guard expressions and self-loops
+- **transitions**: named edges with guard expressions, self-loops, and `on_take` side-effects
 - **Meta-variables**: framework-generated flags (`context_incomplete`, `exit_guard_pass`, `all_approved`, etc.) usable in guard expressions
+- **Declarative field mutations**: `on_entry`, `on_exit`, `on_take` — `set_field` assignments declared directly in YAML, tracking every agentState write in a single artifact (see §3.5)
 
 ---
 
@@ -230,8 +335,11 @@ states:
     human_review:     true | false           # whether to interrupt for human approval
     review_prompt:    "what the approver sees"
     stream:           true | false           # whether to stream LLM output
-    on_exit:          "callback function run after state completes"
-     on_error: errorNode            # state to enter on unhandled error
+    on_entry:                                      # see §3.5
+      set_field: { field: "expression", ... }       # assign fields on state entry
+    on_exit:                                       # see §3.5
+      set_field: { field: "expression", ... }       # assign fields on state exit
+    on_error: errorNode            # state to enter on unhandled error
     description:      "human-readable note about what this state does"
 
     # --- Guard Meta-Variables (framework-generated, usable in guard expressions) ---
@@ -259,6 +367,92 @@ Guard expressions support:
 
 Full formal grammar is deferred to implementation planning (see Appendix C.2).
 
+### 3.5 State Lifecycle Actions — Declarative Field Mutations
+
+Every agentState field write is declared in the YAML. Three lifecycle hooks provide `set_field` assignments at precise execution points. No Python code needed for simple field assignments.
+
+```
+  +--------+
+  | entry  |  on_entry.set_field  ── executed once, before the state's main logic
+  +--------+
+       │
+       ▼
+  +--------+
+  | main   |  executor (llm|code) ── runs the state's primary action or LLM prompt
+  +--------+
+       │
+       ▼
+  +--------+
+  | exit   |  on_exit.set_field  ── executed once, after main logic, before any transition
+  +--------+
+       │
+       ▼
+  +--------+
+  | take   |  on_take.set_field  ── executed on a specific transition, per-edge
+  +--------+
+```
+
+**on_entry / on_exit (per state):**
+
+```yaml
+states:
+  - name: validate_claim
+    executor: code
+    action: run_claim_validations
+    on_entry:
+      set_field:
+        checked_at: "now()"           # expression: framework calls datetime.now()
+        retry_count: 0                # literal: sets retry_count = 0
+    output_schema:
+      validation_result: { type: dict }
+    on_exit:
+      set_field:
+        last_validated: "now()"       # timestamp on every exit
+```
+
+**on_take (per transition):**
+
+```yaml
+transitions:
+  - from: validate_claim
+    to: reject_claim
+    guard: validation_failed
+    on_take:
+      set_field:
+        claim_rejected: true          # this path → claim rejected
+        alert_level: "CRITICAL"       # escalation marker
+```
+
+**Execution order per turn (a state transition from A→B):**
+
+```
+1. on_exit.set_field (state A)       ── A's cleanup fields
+2. Evaluate exit_guard (state A)     ── determines which transition
+3. on_take.set_field (transition)    ── per-edge side effects
+4. Checkpoint (transition committed) ── audit: who/when/why
+5. on_entry.set_field (state B)      ── B's setup fields
+6. Execute state B's main logic      ── executor runs (llm or code)
+```
+
+**Why YAML, not Python:** The entire agentState mutation history is visible in a single artifact. Every field write is traceable: which state set it, at which lifecycle point, with what value. No reading action function code to find `ctx.collectedFields["x"] = y` hidden 50 lines deep.
+
+**Expression types in set_field values:**
+
+| Type | Syntax | Example |
+|------|--------|---------|
+| Literal | quoted or unquoted value | `true`, `0`, `"CRITICAL"` |
+| Function call | `fn(args)` | `now()`, `uuid4()`, `len(collectedFields.items)` |
+| Field reference | `collectedFields.x` | `collectedFields.premium * 0.1` |
+
+**set_field vs action function output_schema:**
+
+| Mechanism | When | For |
+|-----------|------|-----|
+| `on_entry / on_exit / on_take.set_field` | Start/end of any state or transition | Metadata, flags, timestamps, counters |
+| `action() return dict` → `output_schema` merger | During state main execution | Computed business data (premium, total, risk_score) |
+
+Complex computation still belongs in action functions. Simple field assignments belong in YAML.
+
 ---
 
 ## 4. Auto-Generated LangGraph Graph
@@ -275,6 +469,61 @@ For the generated graph of a complete workflow, see the diagram in [README.md](.
 | `code` | Execute deterministic action function; inputs/outputs are auditable |
 
 The graph structure mirrors the transitions definition exactly: the nodes are the states, the edges are the transitions with their guard conditions. Self-loops (e.g., `guard: context_incomplete`) keep the conversation in a state until data is complete.
+
+### 4.1 Auto-Generated Mermaid Visualization
+
+The framework auto-generates a visual diagram of the workflow graph using LangGraph's built-in Mermaid rendering.
+
+**Generation flow:**
+
+```
+workflow.yaml           framework          LangGraph              output
+    │                       │                  │                     │
+    ▼                       ▼                  ▼                     ▼
+ YAML parse ──────────> StateGraph ──────> .get_graph() ──────> draw_mermaid_png()
+                                                            │
+                                                            ▼
+                                                   workflow_graph.png
+```
+
+**Built-in API:**
+
+```python
+from framework import load_workflow, generate_graph_png
+
+graph = load_workflow("workflows/home_insurance/workflow.yaml")
+graph.get_graph().draw_mermaid_png(output_file_path="workflow_graph.png")
+```
+
+The framework provides a convenience function that wraps the full pipeline:
+
+```python
+generate_graph_png(
+    workflow_path="workflows/home_insurance/workflow.yaml",
+    output_path="docs/workflow_graph.png",
+)
+```
+
+**CI auto-generation + snapshot verification:**
+
+```yaml
+# .github/workflows/ci.yml — verify graph matches committed snapshot
+jobs:
+  graph-snapshot:
+    steps:
+      - name: Generate graph from YAML
+        run: framework generate-graph workflows/home_insurance/workflow.yaml --output /tmp/generated.png
+      - name: Compare against committed snapshot
+        run: framework diff-graph /tmp/generated.png docs/workflow_graph.png
+```
+
+The CI step regenerates the graph from YAML and compares it byte-for-byte against the committed snapshot. If they differ:
+- **PR fails** — the YAML changed but the snapshot wasn't updated (or vice versa)
+- **Developer runs** `framework update-graph-snapshot` to regenerate and commit the new snapshot
+
+This guarantees that the graph PNG committed in the repo is always consistent with the YAML definition. Non-technical reviewers can visually inspect `workflow_graph.png` in PR diffs alongside the YAML changes.
+
+**Commitment:** The graph PNG is committed alongside the workflow YAML. Every PR that changes the YAML must also update the graph snapshot. The CI enforces this automatically.
 
 ---
 
@@ -350,14 +599,14 @@ User utterance
       ▼
 ┌─────────────────┐
 │ Layer 1: Intent  │
-│ Classification   │ → intent: make_payment, confidence: 0.92
+│ Classification   │ → intent: file_claim, confidence: 0.92
 └────────┬────────┘
          ▼
 ┌─────────────────┐
 │ Layer 2: Check   │
 │ intent vs state  │
 │                  │
-│ state=filling_form
+│ state=collect_property_info
 │ intent_policy:   │
 │   accept:        │
 │     - provide_information
@@ -365,14 +614,14 @@ User utterance
 │     - decline
 │   on_unlisted: ask_confirm
 │                  │
-│ make_payment ∉ accept
+│ file_claim ∉ accept
 └────────┬────────┘
          ▼
 ┌─────────────────┐
 │ ask_confirm:     │
 │ "You're filling  │
 │  a quote form.   │
-│  Cancel and pay?"│
+│  Cancel and file a claim?"│
 └────────┬────────┘
          ▼
     user responds
@@ -383,10 +632,9 @@ User utterance
     │         │
     ▼         ▼
   state     stay in
-  → idle   filling_form
+  → idle   collect_property_info
   intent    (re-classify
-  → make_   next input)
-  payment
+  → file_claim   next input)
 ```
 
 ### 8.4 Example Scenarios
@@ -402,13 +650,14 @@ For concrete intent+state resolution examples within home insurance workflows, s
 
 ## References
 
+- [W3C SCXML 1.0 Recommendation](https://www.w3.org/TR/scxml/) — semantic standard
+- [transitions Library](https://github.com/pytransitions/transitions) — Python state machine concept reference
+- [LangGraph](https://github.com/langchain-ai/langgraph) — runtime execution engine
 - [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
 - [Domain Model](./2026-06-17-domain-model-design.md)
 - [Routing & Execution](./2026-06-17-routing-execution-layer-design.md)
 - [Extraction Layer](./2026-06-17-extraction-layer-design.md)
 - [Intent Classification](./2026-06-16-intent-classification-design.md)
-- [transitions Library](https://github.com/pytransitions/transitions)
-- [LangGraph](https://github.com/langchain-ai/langgraph)
 
 ## Appendix C: Implementation Planning — Open Questions (State Machine)
 

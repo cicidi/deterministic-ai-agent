@@ -551,7 +551,7 @@ The `text` field is the fallback for channels that only support plain text (SMS,
 | `risk_score_gauge` | Visual risk score (0-100) |
 | `coverage_comparison_table` | Side-by-side coverage options |
 | `claim_status_tracker` | Claim lifecycle progress |
-| `payment_confirmation` | Payment receipt with transaction ID |
+| `claim_receipt` | Claim submission receipt with claim ID |
 | `document_upload_prompt` | File upload with type constraints |
 | `approval_buttons` | Confirm / Decline / Modify actions |
 

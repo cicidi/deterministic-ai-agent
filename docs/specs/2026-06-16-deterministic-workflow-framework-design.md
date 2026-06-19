@@ -73,9 +73,9 @@ workflow:
       collect_property_info:
         - source: application_service   # load current application form
           fields: [property_type, address, building_age, floor_area]
-      process_payment:
-        - source: payment_gateway
-          fields: [outstanding_balance, payment_methods]
+      process_claim_payment:
+        - source: claims_gateway
+          fields: [claim_amount, coverage_details]
   layers:
     understand:
       nodes: [classify_intent, extract_entities]
@@ -109,7 +109,7 @@ agentState.phase = "collect_coverage_needs"
 | **Checkpoint DB** | Every turn | Conversation history + persisted `AgentState` |
 | **Session Store** | Every turn | User profile, OAuth scopes |
 | **Domain Entity API** | On phase entry | Current entity data for the bound entity (e.g., application form state) |
-| **External Business API** | Conditional | Only when a node's code executor declares a dependency (e.g., `payment_gateway` in `process_payment` state) |
+| **External Business API** | Conditional | Only when a node's code executor declares a dependency (e.g., `claims_gateway` in `process_claim_payment` state) |
 
 ## 3. Key Insight: Per-Node Control, Not Per-Layer
 
