@@ -74,6 +74,7 @@ GAP_THRESHOLD=0.5              # relaxed (50% OK in dev)
 # Tools
 ALLOW_DANGEROUS_OPS=true       # skip dangerous_operation approval in dev
 MOCK_EXTERNAL_APIS=true        # mock premium/claims APIs
+PII_SCRUBBING=optional
 ```
 
 ### 2.3 `.env.e2e` (CI / eval)
@@ -166,6 +167,8 @@ environments:
       allow_dangerous: true
     goal_check:
       gap_threshold: 0.5
+    pii:
+      scrubbing: optional
 
   e2e:
     llm:

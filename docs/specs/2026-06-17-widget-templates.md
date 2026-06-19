@@ -243,6 +243,21 @@ chatbot_ui:
       components: instant                # widgets render immediately on arrival
 ```
 
+### 2.8 Accessibility Requirements
+
+All widget templates MUST include ARIA attributes for screen readers and keyboard navigation:
+
+| Widget | Required ARIA |
+|--------|--------------|
+| Form fields | `aria-label`, `aria-required`, `aria-describedby` for error messages |
+| Buttons | `role="button"`, `aria-label` for icon-only buttons |
+| Lists/options | `role="listbox"`, `aria-selected` for selected items |
+| Status messages | `role="status"`, `aria-live="polite"` |
+| Error alerts | `role="alert"`, `aria-live="assertive"` |
+| Progress indicators | `role="progressbar"`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax` |
+
+Widgets must be navigable via Tab/Shift+Tab and actionable via Enter/Space. Color must not be the sole indicator of state (add icons or text labels).
+
 ---
 
 ## 3. Template B: Claude-Generated Widgets

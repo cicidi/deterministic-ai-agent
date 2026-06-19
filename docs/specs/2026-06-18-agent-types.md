@@ -196,6 +196,8 @@ Each agent type has a bounded set of allowed operations. The tool ecosystem enfo
 
 Write operations are NEVER delegated to an agent. They execute as deterministic state machine transitions with full audit trail.
 
+**SDK tools** (`type: sdk` in the Tool Ecosystem) may invoke LLMs internally (e.g., OpenCode tool calling). These costs are NOT tracked by the LLM Gateway — they are the responsibility of the SDK tool's own budget management. Framework operators should set per-tool API key spend limits at the provider level (OpenAI/Anthropic billing dashboard) as a secondary guard. The framework logs SDK tool invocations but does not meter their internal LLM costs.
+
 ---
 
 ## 5. Configuration

@@ -76,6 +76,9 @@ Observability answers: **"Is the framework working correctly, right now?"** and 
 | **LLM** | `llm_schema_violation_total` | Counter | Schema validation failures |
 | **LLM** | `llm_retry_total` | Counter | Retry attempts (across all calls) |
 | **LLM** | `llm_token_usage_total` | Counter | Total tokens consumed (by model) |
+| **LLM** | `llm_escalation_total` | Counter | Escalation steps per from_tier→to_tier |
+| **LLM** | `llm_retry_total` | Counter | Retries before escalation or success (by node_id, error_type) |
+| **LLM** | `llm_tier_usage_ratio` | Gauge | Ratio: calls_on_this_tier / total_calls |
 | **Error** | `error_rate` | Gauge | errorNode invocations / total turns * 100 |
 | **Error** | `errorNode_invocations_total` | Counter | Total errorNode transitions |
 | **Error** | `http_5xx_total` | Counter | HTTP 5xx responses from framework |
@@ -110,6 +113,8 @@ observability:
         - llm_schema_violation_total
         - llm_retry_total
         - llm_token_usage_total
+        - llm_escalation_total
+        - llm_tier_usage_ratio
       
       errors:
         - errorNode_invocations_total
@@ -336,6 +341,8 @@ dashboard_schema:
 | **Schema Violation Spike** | `rate(llm_schema_violation_total[5m]) > 20/min` | Warning | Slack #llm-ops | Check prompt templates, LLM model behavior change |
 | **No Active Conversations** | `conversations_active == 0` for 10 min | Info | Slack #oncall | Verify deployment health, check MCP server status |
 | **Completion Rate Drop** | `completion_rate < 50%` for 15 min | Warning | Slack #product | Review goal_check behavior, check for breaking workflow changes |
+| **High Escalation Rate** | `rate(llm_escalation_total[5m]) > 2` | Warning | Slack #llm-ops | LLM frequently falling back to larger models — check small model health |
+| **Retry Storm** | `rate(llm_retry_total[5m]) > 10` | Critical | PagerDuty / Slack #llm-ops | Excessive LLM retries — possible provider outage or model misconfiguration |
 
 ### 4.2 Alert Rule Schema
 
@@ -379,6 +386,8 @@ alert_rule_schema:
 | SchemaViolationSpike | `schema_violations > 20/min` | warning | 5m |
 | NoActiveConversations | `conversations_active == 0` | info | 10m |
 | CompletionRateDrop | `completion_rate < 50%` | warning | 15m |
+| HighEscalationRate | `rate(llm_escalation_total[5m]) > 2` | warning | 5m |
+| RetryStorm | `rate(llm_retry_total[5m]) > 10` | critical | 5m |
 
 ### 4.3 Alert Routing
 

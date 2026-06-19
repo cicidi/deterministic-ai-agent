@@ -97,6 +97,25 @@ UserContext {
 }
 ```
 
+### 2.4 Verification Order
+
+When both JWT and OAuth are configured, the framework verifies in order:
+
+1. **JWT first** — Fast local verification (public key, no network call). If valid, skip OAuth.
+2. **OAuth second** — If JWT is missing or expired, validate via OAuth token introspection endpoint. This adds latency (network call) but handles token revocation.
+
+```yaml
+auth:
+  verification_order: [jwt, oauth]     # jwt_first | oauth_only | jwt_only
+  jwt:
+    enabled: true
+  oauth:
+    enabled: true
+    introspection_endpoint: "https://auth.example.com/oauth2/introspect"
+```
+
+If neither succeeds, return 401. Failed OAuth introspection (provider down) with no valid JWT → 503 (service unavailable, retry later).
+
 ---
 
 ## 3. Implementation Options
@@ -111,6 +130,8 @@ Relies on a dedicated identity provider. The framework only verifies tokens.
 | **Okta** | OIDC (JWT RS256) | Public key from `https://<domain>/oauth2/default/v1/keys` |
 | **Keycloak** | OIDC (JWT RS256) | Public key from `https://<domain>/realms/<realm>/protocol/openid-connect/certs` |
 | **Google Identity** | OIDC (JWT RS256) | Public key from `https://www.googleapis.com/oauth2/v3/certs` |
+
+Note: OIDC endpoint paths vary by provider. Above are the standard paths for Auth0 and Okta org authorization servers. For custom Okta authorization servers, use `/oauth2/<authorizationServerId>/v1/keys`. For other providers (Keycloak, Azure AD, Google Identity), consult provider documentation. The framework accepts a configurable `jwks_uri`, not a provider enum.
 
 ```yaml
 # framework.yaml

@@ -300,6 +300,8 @@ a2a:
 
 ## 5. Sync vs Async A2A
 
+The canonical sub-workflow contract (inputs, outputs, timeout, retry budget) is defined in [Routing & Execution §5](./2026-06-17-routing-execution-layer-design.md). This A2A section extends that contract with network-level concerns: agent discovery, protocol negotiation, message serialization, and transport.
+
 ### 5.1 Semantics
 
 The same sync/async semantics defined in the sub-workflow spec (Routing & Execution §5.4) apply at the A2A protocol level — but now with full agent semantics:

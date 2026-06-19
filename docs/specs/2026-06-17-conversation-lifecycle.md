@@ -166,6 +166,15 @@ lifecycle_state_machine:
       before: archive_conversation
 ```
 
+### 2.4 Conversation Creation
+
+A conversation is created by the framework when a user's first message arrives with no active conversation_id. The framework auto-creates the conversation with:
+- `conversation_id`: server-assigned UUIDv4
+- `workflow_id`: resolved from the initial intent classification
+- `state`: `created` → transitions to `active` on first message processing
+
+No explicit `POST /conversations` endpoint is needed — creation is implicit on first message. The `daily_conversation_limit` (see §9.4) is checked at creation time.
+
 ---
 
 ## 3. Tracing Model: `trace_id = user_id`
@@ -293,6 +302,12 @@ checkpoint:
       dsn: "${REDIS_DSN}"
       ttl_seconds: 1800              # 30 min cache for active conversations
 ```
+
+### 4.4 Parallel Node Checkpoints
+
+When parallel nodes complete concurrently (e.g., goalChecker + generateResponse), both produce state updates that merge into the checkpoint. Since all state fields use append-only semantics (see [Routing & Execution §1.2](./2026-06-17-routing-execution-layer-design.md)), there is no race condition: both updates are accumulated, never overwritten. LangGraph's built-in checkpoint reducer handles the merge atomically — the framework does not need explicit locking.
+
+If both nodes write to the same dict key (e.g., both append to `collectedFields`), the append ensures both values are preserved. If a conflict is detected (two nodes write conflicting values for the same non-list field), the value is wrapped as `[old, new]` for downstream resolution.
 
 ---
 

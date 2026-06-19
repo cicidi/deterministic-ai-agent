@@ -316,96 +316,180 @@ The gateway supports **automatic model escalation**: when an LLM call fails repe
 
 ### 4.1 Model Tiers
 
-Model tiers are defined as an ordered chain from cheapest to most capable:
+**Framework requirement:** At minimum, 2 providers must be configured, each with at least 2 models. No upper limit — add as many providers and models as needed. Priority determines escalation order.
+
+```yaml
+llm:
+  providers:
+    - name: openai
+      priority: 1                         # try this provider first
+      models:
+        - name: gpt-4o-mini
+          priority: 1                     # cheapest model, try first
+          temperature: 0
+          max_tokens: 4096
+        - name: gpt-4o
+          priority: 2                     # fallback model within provider
+          temperature: 0
+          max_tokens: 4096
+    - name: anthropic
+      priority: 2                         # try after openai exhausted
+      models:
+        - name: claude-haiku-3-5
+          priority: 1
+          temperature: 0
+          max_tokens: 4096
+        - name: claude-sonnet-4-20250514
+          priority: 2
+          temperature: 0
+          max_tokens: 4096
+```
+
+Escalation order is determined by priority: within each provider, models escalate from low priority to high priority. After all models in a provider are exhausted, escalate to the next provider.
 
 ```
-Tier 0 (small)   →  Tier 1 (medium)  →  Tier 2 (large)
-
-e.g.:
-  gpt-4o-mini           →  gpt-4o                →  gpt-4.1
-  claude-haiku-3-5      →  claude-sonnet-4-20250514 →  claude-opus-4-20250514
-  deepseek-chat         →  deepseek-v3           →  deepseek-reasoner
+priority=1 provider: gpt-4o-mini  →  gpt-4o        (exhausted → next provider)
+priority=2 provider: claude-haiku  →  claude-sonnet (exhausted → errorNode)
 ```
 
-Each tier specifies:
+Each model specifies:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `provider` | string | Provider name (openai, anthropic, deepseek) |
-| `model` | string | Model identifier |
-| `temperature` | float | Override temperature per tier (optional) |
-| `max_tokens` | int | Override max_tokens per tier (optional) |
-| `failures_before_escalation` | int | Number of consecutive failures on this tier before moving to the next (default: 2) |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `provider.name` | string | Yes | Provider name (openai, anthropic, deepseek) |
+| `provider.priority` | int | Yes | Provider priority (1 = highest, ascending) |
+| `model.name` | string | Yes | Model identifier |
+| `model.priority` | int | Yes | Model priority within provider (1 = cheapest, ascending) |
+| `model.temperature` | float | No | Override temperature (default: 0) |
+| `model.max_tokens` | int | No | Override max_tokens |
+| `model.failures_before_escalation` | int | No | Failures before moving to next model (default: 2) |
+
+Framework validation at startup: less than 2 providers or less than 2 models per provider → config error, framework refuses to start.
+
+### 4.1a Daily Budget & Cost Calculator
+
+The gateway enforces a daily token budget and cost cap. Each model declares its `price_per_1k_tokens` (input and output). The gateway tracks cumulative daily usage. When budget is exceeded, the service returns HTTP 500 and stops processing.
+
+```yaml
+llm:
+  budget:
+    daily_token_limit: 1000000         # max tokens per day
+    daily_cost_limit_usd: 20.00        # max cost per day
+    on_budget_exceeded: stop_service   # stop_service (throw 500) | warn_only
+
+  providers:
+    - name: openai
+      priority: 1
+      models:
+        - name: gpt-4o-mini
+          priority: 1
+          temperature: 0
+          max_tokens: 4096
+          price_per_1k_tokens:
+            input: 0.00015             # $0.15 / 1M tokens
+            output: 0.00060            # $0.60 / 1M tokens
+        - name: gpt-4o
+          priority: 2
+          temperature: 0
+          max_tokens: 4096
+          price_per_1k_tokens:
+            input: 0.00250
+            output: 0.01000
+    - name: anthropic
+      priority: 2
+      models:
+        - name: claude-haiku-3-5
+          priority: 1
+          price_per_1k_tokens:
+            input: 0.00080
+            output: 0.00400
+        - name: claude-sonnet-4-20250514
+          priority: 2
+          price_per_1k_tokens:
+            input: 0.00300
+            output: 0.01500
+```
+
+**Cost calculation per call:**
+
+```
+call_cost = (prompt_tokens / 1000) × model.price_per_1k_tokens.input
+          + (completion_tokens / 1000) × model.price_per_1k_tokens.output
+
+daily_cost = Σ(all calls today).call_cost
+daily_tokens = Σ(all calls today).(prompt_tokens + completion_tokens)
+```
+
+Before each LLM call, the gateway checks:
+1. `daily_tokens + estimated_call_tokens ≤ daily_token_limit`
+2. `daily_cost + estimated_call_cost ≤ daily_cost_limit_usd`
+
+If either is exceeded, the call is rejected with HTTP 500. The gateway records `budget_exceeded: true` in the audit log.
+
+When `on_budget_exceeded: warn_only`, the gateway logs a warning but still allows the call (useful for dev/testing).
 
 ### 4.2 Escalation Flow
 
 ```
-Attempt 1 ──→ Tier 0 (small model: gpt-4o-mini) ──→ FAIL (schema violation)
-Attempt 2 ──→ Tier 0 (small model: gpt-4o-mini) ──→ FAIL (provider timeout)
-       │
-       ├──→ Step: deterministic fallback (keyword/regex extraction)
-       │         │
-       │         ├── fallback produces candidate data
-       │         │        │
-       │         │        ├── schema validation PASS + min_field_confidence met
-       │         │        │        └──→ return result (source: "deterministic_fallback", auditable)
-       │         │        └── schema validation FAIL or below min_field_confidence
-       │         │                 └──→ escalate to Tier 1
-       │         │
-       │         └── fallback extracts nothing ──→ escalate to Tier 1
-       │
-Attempt 3 ──→ Tier 1 (medium model: gpt-4o) ──→ FAIL (schema violation)
-Attempt 4 ──→ Tier 1 (medium model: gpt-4o) ──→ FAIL (type mismatch)
-       │
-       ├──→ Step: deterministic fallback (same constraints as above)
-       │         └── fallback FAIL ──→ escalate to Tier 2
-       │
-Attempt 5 ──→ Tier 2 (large model: gpt-4.1) ──→ SUCCESS ✅
+openai (priority=1):
+  Attempt 1 ──→ gpt-4o-mini (priority=1) ──→ FAIL (schema violation)
+  Attempt 2 ──→ gpt-4o-mini (priority=1) ──→ FAIL (provider timeout)
+         │
+         ├──→ Step: deterministic fallback (keyword/regex extraction)
+         │         │
+         │         ├── fallback produces candidate data → validate → FAIL
+         │         └──→ escalate to next model
+         │
+  Attempt 3 ──→ gpt-4o (priority=2) ──→ FAIL (schema violation)
+  Attempt 4 ──→ gpt-4o (priority=2) ──→ FAIL (type mismatch)
+         │
+         ├──→ deterministic fallback → FAIL
+         └──→ all openai models exhausted → escalate to next provider
+
+anthropic (priority=2):
+  Attempt 5 ──→ claude-haiku-3-5 (priority=1) ──→ SUCCESS ✅
 ```
 
-At each tier, the gateway retries up to `failures_before_escalation` times (default: 2). After 2 failures on the current tier, the gateway attempts **deterministic fallback** before escalating to the next tier. When all tiers are exhausted, the gateway routes to `errorNode`.
+At each model, the gateway retries up to `failures_before_escalation` times (default: 2). After 2 failures, deterministic fallback runs. If fallback also fails, escalate to the next model within the same provider. When all models in a provider are exhausted, escalate to the next provider by priority. When all providers exhausted → `errorNode`.
 
-**Circuit breaker:** If ALL tiers across ALL providers are exhausted via `provider_error` (timeout, 5xx) — indicating a total provider outage — the gateway enters circuit-open state for `circuit_breaker_ttl_seconds` (default: 30). During this window, all LLM calls immediately route to `errorNode` with `escalate_to_human` strategy, avoiding wasted timeouts on known-unavailable providers.
+**Circuit breaker:** If ALL models across ALL providers are exhausted via `provider_error` (timeout, 5xx) — indicating a total provider outage — the gateway enters circuit-open state for `circuit_breaker_ttl_seconds` (default: 30). During this window, all LLM calls immediately route to `errorNode` with `escalate_to_human` strategy.
 
-**Prompt strategy on escalation:** Each tier escalation chooses how to present the prompt context to the next tier's LLM:
+**Prompt strategy on escalation:**
 
 | Strategy | Behavior | Cost |
 |----------|----------|------|
 | `carry_forward` | Append all error injections to the previous prompt | Highest token accumulation |
-| `reset` | Fresh prompt per tier, no error history | Lowest tokens, no correction context |
-| `summarize` (default) | Inject a one-line failure summary: "Previous tier failed after 2 attempts (missing field 'confidence'). Ensure all required fields are present." | Minimal token overhead, retains correction context |
+| `reset` | Fresh prompt per model, no error history | Lowest tokens, no correction context |
+| `summarize` (default) | Inject a one-line failure summary | Minimal token overhead, retains correction context |
 
 ```yaml
 llm:
   model_escalation:
     prompt_strategy: summarize          # carry_forward | reset | summarize
-    max_prompt_length: 8192             # force reset if accumulated prompt exceeds this
+    max_prompt_length: 8192
 ```
 
-`summarize` is the default — it gives the next tier enough context to avoid repeating the same mistake without ballooning token costs.
-
-Deterministic fallback is tier-level (once per tier, after LLM retries exhausted) and can be disabled per-node. Fallback applies to extraction nodes (keyword/regex) and decision nodes (enum-value substring matching); for response nodes it is typically disabled since free-text cannot be salvaged deterministically.
+Deterministic fallback runs once per model (after LLM retries exhausted) and can be disabled per-node. Fallback applies to extraction nodes (keyword/regex) and decision nodes (enum-value substring matching); for response nodes it is typically disabled.
 
 ```yaml
 llm:
   model_escalation:
     deterministic_fallback_before_escalation: true
-    deterministic_fallback_timeout_ms: 100        # tune per-node based on extraction complexity
+    deterministic_fallback_timeout_ms: 100
     deterministic_fallback_acceptance: require_all_fields
     deterministic_fallback_quality:
-      min_field_confidence: 0.5                   # minimum per-field regex/keyword match score
-      post_fallback_validate: true                # run schema validation on fallback output
-      applicable_node_types: [extraction]         # extraction nodes only; decision/response excluded
+      min_field_confidence: 0.5
+      post_fallback_validate: true
+      applicable_node_types: [extraction]
 ```
 
 **Fallback constraints:**
-- Fallback ONLY applies to extraction nodes (L1). Decision nodes and response nodes skip fallback because regex/keyword cannot salvage reasoning or free-text generation quality.
-- Fallback output MUST pass the same `output_schema` JSON validation as LLM output. If fallback produces invalid JSON or missing required fields, it fails and escalation proceeds.
-- Fallback results are marked `source: "deterministic_fallback"` in the audit trail, with a `fallback_confidence` score per extracted field.
-- The `min_field_confidence` gate rejects individual fields below the threshold; with `require_all_fields`, any rejected field causes fallback failure.
-- The `deterministic_fallback_timeout_ms` is configurable; tune per-node based on extraction complexity (default: 100ms for simple keyword, 500ms for multi-field regex).
+- Fallback ONLY applies to extraction nodes (L1). Decision nodes and response nodes skip fallback.
+- Fallback output MUST pass the same `output_schema` JSON validation as LLM output.
+- Fallback results are marked `source: "deterministic_fallback"` in the audit trail.
+- The `min_field_confidence` gate rejects individual fields below threshold.
 
-**max_tokens guard:** If `max_tokens` is too small for the `output_schema`, every LLM call will produce truncated (invalid) JSON. The gateway performs a pre-call estimate: if `max_tokens < estimated_schema_tokens`, a warning is emitted and the call may bypass retries entirely (fail fast to errorNode) since retrying with the same `max_tokens` is guaranteed to fail. The per-tier `max_tokens` override (§4.1) can be used to increase the limit on higher tiers.
+**max_tokens guard:** If `max_tokens` is too small for the `output_schema`, the gateway performs a pre-call estimate: if `max_tokens < estimated_schema_tokens`, a warning is emitted and the call may bypass retries entirely (fail fast to errorNode). The per-model `max_tokens` override (§4.1) can be used to increase the limit on higher-priority models.
 
 ### 4.3 Escalation Triggers
 
@@ -418,64 +502,39 @@ Escalation counts **all failure types** by default. Which failures trigger escal
 | `content_quality` | disabled | Empty response, too-short output, off-topic (optional) |
 
 ```yaml
-# Per-node or global configuration
 llm:
   model_escalation:
-    enabled: true                   # default: true in prod, false in dev
-    failures_before_escalation: 2   # escalate after 2 failures on current tier
+    enabled: true
+    failures_before_escalation: 2        # escalate after 2 failures on current model
     trigger_on:
       - provider_error
       - schema_violation
-    tiers:
-      - provider: openai
-        model: gpt-4o-mini
-        temperature: 0
-        max_tokens: 4096
-        failures_before_escalation: 2
-      - provider: openai
-        model: gpt-4o
-        temperature: 0
-        max_tokens: 4096
-        failures_before_escalation: 2
-      - provider: openai
-        model: gpt-4.1
-        temperature: 0
-        max_tokens: 16384
-        failures_before_escalation: 1    # last tier: fail fast to errorNode
 ```
 
-### 4.4 Tier-Aware Retry Budget
+### 4.4 Priority-Aware Retry Budget
 
-The total retry budget is the sum of per-tier allowances. Since escalation happens when the current tier exhausts its `failures_before_escalation` attempts, the maximum number of LLM calls across all tiers is:
-
-```
-max_total_calls = Σ(tier.failures_before_escalation)
-                = 2 + 2 + 1 = 5
-```
-
-If any call succeeds, the chain stops early. The formula only represents the worst case (all failures, all tiers exhausted).
-
-The LLM +1 extra retry (VISION.md §6.3) applies per-tier:
+The total retry budget is the sum of per-model allowances across all providers:
 
 ```
-per_tier_failures = tier.failures_before_escalation + 1   // LLM nodes
+max_total_calls = Σ(per-model failures_before_escalation)
 
-Example with 3 tiers [2, 2, 1]:
-  Non-LLM max calls: 2 + 2 + 1 = 5
-  LLM max calls:     (2+1) + (2+1) + (1+1) = 3 + 3 + 2 = 8
+Example with 2 providers, 2 models each [2,2] + [2,2]:
+  Non-LLM max calls: 2 + 2 + 2 + 2 = 8
+  LLM max calls:     (2+1) + (2+1) + (2+1) + (2+1) = 12
 ```
 
-Note: LLM +1 applies to all tiers including the last, meaning the most expensive model may be called twice before errorNode. The `failures_before_escalation: 1` on the last tier is a non-LLM default; for LLM nodes the effective limit is 2. To enforce a hard single-attempt cap on the last tier regardless of node type, set `llm_extra_retry: false` on the last tier:
+If any call succeeds, the chain stops early. The LLM +1 extra retry (VISION.md §6.3) applies per model. To enforce a hard single-attempt cap on the last model, set `llm_extra_retry: false` on that model:
 
 ```yaml
-tiers:
-  - model: gpt-4o-mini
-    failures_before_escalation: 2
-  - model: gpt-4o
-    failures_before_escalation: 2
-  - model: gpt-4.1
-    failures_before_escalation: 1
-    llm_extra_retry: false       # no +1 on the most expensive tier
+providers:
+  - name: openai
+    priority: 1
+    models:
+      - name: gpt-4o-mini
+        failures_before_escalation: 2
+      - name: gpt-4o
+        failures_before_escalation: 1
+        llm_extra_retry: false         # no +1 on last model
 ```
 
 ### 4.5 Audit Trail
@@ -511,55 +570,15 @@ Each escalation is recorded in the audit log. Example (Tier 0 exhausted, Tier 1 
 
 The errorNode audit (§8) extends this structure. This section covers escalation-specific fields; §8 adds error classification, coercion details, and raw response capture.
 
-### 4.6 Model Escalation Strategies
+### 4.6 Environment-Specific Defaults
 
-#### Option A: Fixed Tiers (Default)
+| Environment | Escalation Enabled | Default Providers |
+|-------------|-------------------|-------------------|
+| dev | false (single provider, fail fast) | openai: gpt-4o-mini only |
+| e2e | true (test escalation behavior) | openai [gpt-4o-mini, gpt-4o] + anthropic [claude-haiku-3-5] |
+| prod | true | openai [gpt-4o-mini, gpt-4o] + anthropic [claude-haiku-3-5, claude-sonnet-4-20250514] |
 
-Pre-configured tier chains per provider. Simplest configuration; tiers are defined once in environment config.
-
-```yaml
-# .env.prod
-LLM_MODEL_TIERS=openai:gpt-4o-mini→gpt-4o→gpt-4.1;anthropic:claude-haiku→claude-sonnet→claude-opus
-```
-
-| Strengths | Predictable costs, simple config, easy to audit |
-|-----------|------------------------------------------------|
-| Weaknesses | No cross-provider fallback, tiers are static |
-| Best for | Single-provider deployments, cost-predictable environments |
-
-#### Option B: Provider-Cascade
-
-Escalate across providers, not just within one provider. After OpenAI tiers are exhausted, switch to Anthropic.
-
-```yaml
-llm:
-  model_escalation:
-    strategy: provider_cascade
-    tiers:
-      - provider: openai
-        model: gpt-4o-mini
-        failures_before_escalation: 2
-      - provider: openai
-        model: gpt-4o
-        failures_before_escalation: 2
-      - provider: anthropic
-        model: claude-sonnet-4-20250514
-        failures_before_escalation: 2
-      - provider: anthropic
-        model: claude-opus-4-20250514
-        failures_before_escalation: 1
-```
-
-| Strengths | Higher resilience (provider outage handled), best-in-class per tier |
-|-----------|---------------------------------------------------------------------|
-| Weaknesses | Multi-provider API key management, different cost structures |
-| Best for | Production with strict SLA, multi-cloud deployments |
-
-### 4.7 Comparison Matrix
-
-| Dimension | Option A (Fixed Tiers) | Option B (Provider-Cascade) |
-|-----------|----------------------|---------------------------|
-| Config complexity | Low | Medium |
+### 4.7 Sticky Model (Escalation Memory)
 | Provider redundancy | None | Full (multi-provider) |
 | Cost predictability | High | Medium |
 | Latency overhead | None | None |
