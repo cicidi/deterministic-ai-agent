@@ -71,6 +71,16 @@ class MockGateway(Gateway):
         if ("offer" in msg and "%" in msg) or ("give" in msg and "%" in msg) or ("6." in msg and "%" in msg):
             return IntentClassificationResult(intent="submit_quote", confidence=1.0, entities={"interest_rate": 6.5})
 
+        # Privacy relay intents
+        if ("ask the borrower" in msg or "ask borrower" in msg or "employment" in msg):
+            return IntentClassificationResult(intent="ask_borrower_question", confidence=1.0)
+        if ("contact" in msg and ("borrower" in msg or "directly" in msg)):
+            return IntentClassificationResult(intent="request_contact_info", confidence=1.0)
+        if "switch" in msg and ("lead" in msg or "1" in msg or "2" in msg):
+            return IntentClassificationResult(intent="switch_lead", confidence=1.0)
+        if ("employed" in msg or "answer" in msg) and ("full-time" in msg or "company" in msg or "job" in msg):
+            return IntentClassificationResult(intent="answer_officer_question", confidence=1.0)
+
         # Loan officer: providing registration info (NMLS, licensing)
         if "nmls" in msg or "licensed" in msg:
             entities = {}
@@ -707,3 +717,133 @@ def test_scenario_knowledge_mid_flow(agent):
 
     resp, state = _step(agent, state, "Home worth 500000", user_id, utype, "Peter")
     assert state.collected_data.get("home_value") == 500000
+
+
+# ═════════════════════════════════════════════════════════════
+# Privacy Relay: borrower ↔ officer via agent (masked)
+# ═════════════════════════════════════════════════════════════
+
+# ── Scenario 26: Officer asks borrower a question via relay ──
+def test_scenario_privacy_relay_officer_asks_borrower(agent):
+    """Officer sends question to borrower — agent relays without revealing contacts."""
+    # Create a lead first
+    alice_state = AgentState(user_id="alice_pr", user_type="borrower", user_name="Alice")
+    resp, alice_state = _step(agent, alice_state, "Hi", "alice_pr", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "I want rates", "alice_pr", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Buying", "alice_pr", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Home worth 500000", "alice_pr", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Need 300000 loan", "alice_pr", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "In California", "alice_pr", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Credit score 720", "alice_pr", "borrower", "Alice")
+    assert alice_state.phase == "completed"
+
+    # Officer Mike asks a question to the borrower
+    mike_state = AgentState(user_id="mike_pr", user_type="loan_officer", user_name="Mike")
+    mike_state = _clone_state(mike_state, current_lead_id=alice_state.lead_id)
+    resp, mike_state = _step(agent, mike_state, "Can you ask the borrower what their employment status is?", "mike_pr", "loan_officer", "Mike")
+    assert "forward" in resp.lower() or "borrower" in resp.lower() or "notified" in resp.lower()
+
+
+# ── Scenario 27: Borrower answers officer's question via relay ──
+def test_scenario_privacy_relay_borrower_answers(agent):
+    """Borrower responds to officer's question — relayed back without contact reveal."""
+    alice_state = AgentState(user_id="alice_pa", user_type="borrower", user_name="Alice")
+    resp, alice_state = _step(agent, alice_state, "Hi", "alice_pa", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "I want rates", "alice_pa", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Buying", "alice_pa", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Home worth 500000", "alice_pa", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Need 300000 loan", "alice_pa", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "In California", "alice_pa", "borrower", "Alice")
+    resp, alice_state = _step(agent, alice_state, "Credit score 720", "alice_pa", "borrower", "Alice")
+
+    # Alice responds to a question
+    resp, alice_state = _step(agent, alice_state, "I am employed full-time at a tech company", "alice_pa", "borrower", "Alice")
+    assert "sent" in resp.lower() or "officer" in resp.lower() or "forward" in resp.lower() or "review" in resp.lower()
+
+
+# ── Scenario 28: Officer requests contact info (payment gate) ──
+def test_scenario_privacy_relay_officer_request_contact(agent):
+    """Officer wants to unlock borrower contact — agent shows payment gate."""
+    mike_state = AgentState(user_id="mike_rc", user_type="loan_officer", user_name="Mike")
+    resp, mike_state = _step(agent, mike_state, "I want to contact this borrower directly", "mike_rc", "loan_officer", "Mike")
+    assert "35" in resp or "fee" in resp.lower() or "purchase" in resp.lower() or "balance" in resp.lower()
+
+
+# ═════════════════════════════════════════════════════════════
+# Lead Context Switching
+# ═════════════════════════════════════════════════════════════
+
+# ── Scenario 29: Officer switches lead by number ──
+def test_scenario_lead_switch_by_number(agent):
+    """Officer sees lead list, switches to a specific lead by number."""
+    # Create 2 leads in CA
+    for i, name in enumerate(["alice_ls", "bob_ls"], 1):
+        state = AgentState(user_id=name, user_type="borrower", user_name=name)
+        resp, state = _step(agent, state, "Hi", name, "borrower", name)
+        resp, state = _step(agent, state, "I want rates", name, "borrower", name)
+        resp, state = _step(agent, state, "Buying", name, "borrower", name)
+        resp, state = _step(agent, state, f"Home worth {500000 * i}", name, "borrower", name)
+        resp, state = _step(agent, state, "Need 300000 loan", name, "borrower", name)
+        resp, state = _step(agent, state, "In California", name, "borrower", name)
+        resp, state = _step(agent, state, "Credit score 720", name, "borrower", name)
+        assert state.phase == "completed"
+
+    mike_state = AgentState(user_id="mike_ls", user_type="loan_officer", user_name="Mike")
+    resp, mike_state = _step(agent, mike_state, "Show me leads in California", "mike_ls", "loan_officer", "Mike")
+    assert "lead" in resp.lower() or "available" in resp.lower()
+
+    # Switch to lead #1
+    resp, mike_state = _step(agent, mike_state, "I want to switch to lead 1", "mike_ls", "loan_officer", "Mike")
+    assert "switch" in resp.lower() or "Lead" in resp or "1" in resp
+
+
+# ═════════════════════════════════════════════════════════════
+# Deterministic Extraction Fallback
+# ═════════════════════════════════════════════════════════════
+
+# ── Scenario 30: Regex extracts home value from raw message ──
+def test_scenario_deterministic_extraction_home_value(agent):
+    """Regex fallback extracts home value when LLM returns no entities."""
+    from src.executors.extract import _deterministic_extract
+    result = _deterministic_extract("My home is worth $500,000")
+    assert result.get("home_value") == 500000
+    result = _deterministic_extract("The property is valued at 800k")
+    assert result.get("home_value") == 800000
+
+# ── Scenario 31: Regex extracts loan amount ──
+def test_scenario_deterministic_extraction_loan_amount(agent):
+    """Regex fallback extracts loan amount."""
+    from src.executors.extract import _deterministic_extract
+    result = _deterministic_extract("I need to borrow $300,000")
+    assert result.get("loan_amount") == 300000
+    result = _deterministic_extract("Looking for 400k loan")
+    assert result.get("loan_amount") == 400000
+
+# ── Scenario 32: Regex extracts state ──
+def test_scenario_deterministic_extraction_state(agent):
+    """Regex fallback extracts state code."""
+    from src.executors.extract import _deterministic_extract
+    result = _deterministic_extract("I'm in CA and the property is nice")
+    assert result.get("state") == "CA"
+
+# ── Scenario 33: Regex extracts loan purpose ──
+def test_scenario_deterministic_extraction_loan_purpose(agent):
+    """Regex fallback detects purchase vs refinance."""
+    from src.executors.extract import _deterministic_extract
+    result = _deterministic_extract("I'm buying a new home")
+    assert result.get("loan_purpose") == "purchase"
+    result = _deterministic_extract("I want to refinance my mortgage")
+    assert result.get("loan_purpose") == "refinance"
+
+# ── Scenario 34: Regex extracts credit score ──
+def test_scenario_deterministic_extraction_credit(agent):
+    """Regex fallback extracts credit score."""
+    from src.executors.extract import _deterministic_extract
+    result = _deterministic_extract("My credit score is 720")
+    assert result.get("credit_score_range") == "720_739"
+
+
+def _clone_state(state, **overrides):
+    """Copy-on-Write helper for tests."""
+    import dataclasses
+    return dataclasses.replace(state, **overrides)

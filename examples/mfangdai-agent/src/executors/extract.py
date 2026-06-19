@@ -1,7 +1,100 @@
 """Layer 1: Entity Extraction — E→V→T pipeline with hybrid fallback."""
+import re
+
 from src.hydration import AgentState
 from src.executors.classify import LEAD_REQUIRED_FIELDS, IntentClassificationResult
 
+
+# ── Regex-based deterministic fallback extraction ──
+
+HOME_VALUE_PATTERNS = [
+    (r'(?:home|house|property|condo)(?:\s+is)?\s*(?:worth|valued?\s*(?:at)?|price(?:d?\s*(?:at)?)?)\s*\$?(\d[\d,.]*(?:\s*k)?)', 1),
+    (r'\$?(\d[\d,.]*(?:\s*k)?)\s*(?:home|house|property)', 1),
+    (r'(?:worth|value)\s*(?:is|about|around|of)?\s*\$?(\d[\d,.]*(?:\s*k)?)', 1),
+]
+
+LOAN_AMOUNT_PATTERNS = [
+    (r'(?:need|want|borrow|loan\s*(?:amount|of)?)\s*\$?(\d[\d,.]*(?:\s*k)?)', 1),
+    (r'(?:borrowing|looking\s*(?:for|at|to\s*borrow))\s*\$?(\d[\d,.]*(?:\s*k)?)', 1),
+    (r'loan\s*(?:of|for|amount)?\s*\$?(\d[\d,.]*(?:\s*k)?)', 1),
+]
+
+STATE_PATTERNS = [
+    (r'\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b', 0),
+]
+
+LOAN_PURPOSE_PATTERNS = [
+    (r'\b(buy|buying|purchas\w*|new\s*(?:home|house|property))\b', "purchase"),
+    (r'\b(refinanc\w*|refi)\b', "refinance"),
+]
+
+CREDIT_SCORE_PATTERNS = [
+    (r'(?:credit\s*(?:score)?\s*(?:is|of|about|around)?)\s*(\d{3})\b', 1),
+    (r'(?:score\s*(?:is|of)?)\s*(\d{3})\b', 1),
+]
+
+
+def _parse_number(text: str) -> float:
+    """Parse a number string, handling commas, spaces, and k/m suffixes."""
+    clean = text.replace(",", "").replace(" ", "").lower()
+    if clean.endswith("k"):
+        return float(clean[:-1]) * 1000
+    if clean.endswith("m"):
+        return float(clean[:-1]) * 1000000
+    return float(clean)
+
+
+def _deterministic_extract(user_message: str) -> dict:
+    """Extract entities from raw user message using regex patterns.
+    
+    This is the deterministic fallback when LLM extraction fails or returns empty.
+    """
+    entities = {}
+
+    # Home value
+    for pattern, group_idx in HOME_VALUE_PATTERNS:
+        m = re.search(pattern, user_message, re.IGNORECASE)
+        if m:
+            try:
+                entities["home_value"] = _parse_number(m.group(group_idx))
+            except ValueError:
+                pass
+            break
+
+    # Loan amount
+    for pattern, group_idx in LOAN_AMOUNT_PATTERNS:
+        m = re.search(pattern, user_message, re.IGNORECASE)
+        if m:
+            try:
+                entities["loan_amount"] = _parse_number(m.group(group_idx))
+            except ValueError:
+                pass
+            break
+
+    # State
+    for pattern, group_idx in STATE_PATTERNS:
+        m = re.search(pattern, user_message)
+        if m:
+            entities["state"] = m.group(group_idx)
+            break
+
+    # Loan purpose
+    for pattern, value in LOAN_PURPOSE_PATTERNS:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            entities["loan_purpose"] = value
+            break
+
+    # Credit score
+    for pattern, group_idx in CREDIT_SCORE_PATTERNS:
+        m = re.search(pattern, user_message, re.IGNORECASE)
+        if m:
+            entities["credit_score_range"] = _normalize_credit_score(m.group(group_idx))
+            break
+
+    return entities
+
+
+# ── Field prompts ──
 
 NEXT_FIELD_PROMPTS = {
     "loan_purpose": "Are you buying a new home (purchase) or refinancing an existing mortgage?",
@@ -83,23 +176,23 @@ def extract_and_merge(
     state: AgentState,
     intent_result: IntentClassificationResult,
 ) -> tuple[dict, list[str]]:
-    """Extract entities from LLM + deterministic fallback, merge with collected_data.
-
-    Returns (merged_data, missing_fields).
-    """
+    """Extract entities from LLM + deterministic fallback, merge with collected_data."""
     extracted = dict(intent_result.entities) if intent_result.entities else {}
+
+    # Hybrid fallback: if LLM extracted nothing, try deterministic regex
+    if not extracted and state.messages:
+        user_msg = state.messages[-1].get("content", "")
+        extracted = _deterministic_extract(user_msg)
+
     merged = {**state.collected_data, **extracted}
 
     # Deterministic transforms
     if "credit_score_range" in merged and merged["credit_score_range"]:
-        if merged["credit_score_range"] not in CREDIT_SCORE_MAP.values():
-            merged["credit_score_range"] = _normalize_credit_score(
-                merged["credit_score_range"]
-            )
+        merged["credit_score_range"] = _normalize_credit_score(str(merged["credit_score_range"]))
     if "state" in merged and merged["state"]:
-        merged["state"] = _normalize_state(merged["state"])
+        merged["state"] = _normalize_state(str(merged["state"]))
     if "loan_purpose" in merged and merged["loan_purpose"]:
-        merged["loan_purpose"] = _normalize_loan_purpose(merged["loan_purpose"])
+        merged["loan_purpose"] = _normalize_loan_purpose(str(merged["loan_purpose"]))
 
     missing = [f for f in LEAD_REQUIRED_FIELDS if f not in merged or not merged[f]]
     return merged, missing

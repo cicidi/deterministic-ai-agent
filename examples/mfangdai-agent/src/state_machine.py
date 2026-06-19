@@ -151,6 +151,10 @@ class Agent:
             state = _clone(state, messages=state.messages + [{"role": "assistant", "content": response}])
             return {"response": response, "state": state, "phase": state.phase}
 
+        if intent == "answer_officer_question":
+            user_msg = state.messages[-1]["content"] if state.messages else ""
+            return self._borrower_answer_officer(state, user_msg)
+
         if intent == "ask_mortgage_question":
             user_msg = state.messages[-1]["content"] if state.messages else ""
             return self._handle_knowledge_question(state, user_msg)
@@ -233,6 +237,14 @@ class Agent:
             return self._officer_submit_quote(state)
         if intent == "register_loan_officer":
             return self._officer_register(state, intent_result)
+        if intent == "ask_borrower_question":
+            user_msg = state.messages[-1]["content"] if state.messages else ""
+            return self._officer_ask_borrower(state, user_msg)
+        if intent == "request_contact_info":
+            return self._officer_request_contact(state)
+        if intent == "switch_lead":
+            user_msg = state.messages[-1]["content"] if state.messages else ""
+            return self._officer_switch_lead(state, user_msg)
 
         response = format_help_response(state.user_type)
         state = _clone(state, messages=state.messages + [{"role": "assistant", "content": response}])
@@ -268,3 +280,87 @@ class Agent:
         )
         state = _clone(state, messages=state.messages + [{"role": "assistant", "content": response}])
         return {"response": response, "state": state, "phase": state.phase}
+
+    # ── Privacy relay: borrower ↔ officer via agent ──
+
+    def _officer_ask_borrower(self, state: AgentState, user_message: str) -> dict:
+        """Officer asks borrower a question via masked relay."""
+        session = get_session()
+        try:
+            lead_id = state.current_lead_id or state.lead_id
+            relay = RevealRequestModel(
+                lead_id=lead_id or "unknown",
+                from_user_id=state.user_id,
+                from_user_type="loan_officer",
+                to_user_type="borrower",
+                message=user_message,
+            )
+            session.add(relay)
+            session.commit()
+            response = (
+                "Your question has been forwarded to the borrower. "
+                "They will be notified and can respond here. "
+                "(Your contact info is hidden until you purchase the lead.)"
+            )
+        finally:
+            session.close()
+        state = _clone(state, messages=state.messages + [{"role": "assistant", "content": response}])
+        return {"response": response, "state": state, "phase": state.phase}
+
+    def _borrower_answer_officer(self, state: AgentState, user_message: str) -> dict:
+        """Borrower responds to officer's question via masked relay."""
+        session = get_session()
+        try:
+            relay = RevealRequestModel(
+                lead_id=state.current_lead_id or state.lead_id or "unknown",
+                from_user_id=state.user_id,
+                from_user_type="borrower",
+                to_user_type="loan_officer",
+                message=user_message,
+            )
+            session.add(relay)
+            session.commit()
+            response = "Your response has been sent to the loan officer. They'll review it and get back to you."
+        finally:
+            session.close()
+        state = _clone(state, messages=state.messages + [{"role": "assistant", "content": response}])
+        return {"response": response, "state": state, "phase": state.phase}
+
+    def _officer_request_contact(self, state: AgentState) -> dict:
+        """Officer requests to unlock borrower contact info (payment gate)."""
+        response = (
+            "To view the borrower's contact information, a $35 lead purchase fee applies. "
+            "This will be deducted from your balance. Reply 'confirm' to proceed, "
+            "or ask the borrower additional questions first."
+        )
+        state = _clone(state, messages=state.messages + [{"role": "assistant", "content": response}])
+        return {"response": response, "state": state, "phase": state.phase}
+
+    # ── Lead context switching ──
+
+    def _officer_switch_lead(self, state: AgentState, hint: str) -> dict:
+        """Officer queries to switch current lead by hint (lead number, state name)."""
+        import re as _re
+        session = get_session()
+        try:
+            officers = session.query(LoanOfficerModel).all()
+            officer = next((o for o in officers if state.user_id in (o.email, o.id)), officers[0] if officers else None)
+            if not officer:
+                resp = "I couldn't identify your account. Please register first."
+                return {"response": resp, "state": state, "phase": state.phase}
+            leads = get_available_leads_for_officer(officer.licensed_states, session)
+            if not leads:
+                resp = "No leads available in your licensed states."
+                return {"response": resp, "state": state, "phase": state.phase}
+            num_match = _re.search(r'#?(\d+)', hint)
+            if num_match:
+                idx = int(num_match.group(1)) - 1
+                if 0 <= idx < len(leads):
+                    target = leads[idx]
+                    state = _clone(state, current_lead_id=target["id"])
+                    resp = f"Switched to lead #{idx + 1}: {target['loan_purpose'].title()}, ${target['loan_amount']:,.0f} loan, {target['state']}, Credit: {target['credit_score_range']}."
+                    return {"response": resp, "state": state, "phase": state.phase}
+            resp = format_leads_response(leads) + "\n\nReply with the lead number to switch to it."
+            return {"response": resp, "state": state, "phase": state.phase}
+        finally:
+            session.close()

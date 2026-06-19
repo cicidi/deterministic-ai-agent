@@ -17,6 +17,7 @@ SYSTEM_INTENTS = [
     "ask_borrower_question",
     "answer_officer_question",
     "request_contact_info",
+    "switch_lead",
     "correction",
     "unrecognized_intent",
 ]
@@ -99,4 +100,5 @@ def is_borrower_intent(intent: str) -> bool:
 
 def is_officer_intent(intent: str) -> bool:
     return intent in ("ask_for_leads", "submit_quote", "register_loan_officer",
-                       "ask_borrower_question", "request_contact_info", "ask_mortgage_question")
+                       "ask_borrower_question", "request_contact_info",
+                       "switch_lead", "ask_mortgage_question")
