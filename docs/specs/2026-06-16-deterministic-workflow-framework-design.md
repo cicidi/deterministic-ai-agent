@@ -17,6 +17,7 @@
 | 2026-06-17 | 0.7.0 | Add Context Hydration layer: pre-processing step loads history, state, session, external entities before three-layer execution |
 | 2026-06-17 | 0.8.0 | Update Related Design Documents with all child specs; add Document Tree section; fill missing table cell |
 | 2026-06-18 | 0.9.0 | Update `ToolMeta.type` enum to include `a2a` and `sdk` per Decision 24; sync document tree with latest specs |
+| 2026-06-19 | 0.10.0 | Add reference implementation mapping (mfangdai-agent) — see Appendix B |
 
 ---
 
@@ -313,3 +314,27 @@ docs/
 | 12 | Blue-green deployment — routing conversations when old and new workflows coexist | Zero-downtime updates |
 | 13 | Multi-tenant isolation — how to isolate workflow instances across customers | Security, resource management |
 | 14 | Audit log storage — format, retention period, query API | Regulatory compliance review |
+
+### A.5 Reference Implementation
+
+The mfangdai-agent project at `~/project/mfangdai-ai-agent/` implements all three layers of this framework as a mortgage lead collection chatbot. The table below maps each spec concept to its concrete source file.
+
+| Spec Concept | File | Lines | Notes |
+|---|---|---|---|
+| Context Hydration | `src/hydration.py` | 19 | `AgentState` dataclass with CoW via `dataclasses.replace` |
+| Layer 1: Intent Classification | `src/executors/classify.py` | 97 | 10 system intents + custom intents, `CLASSIFY_PROMPT_TEMPLATE` |
+| Layer 1: E→V→T Pipeline | `src/executors/extract.py` | 208 | Hybrid: LLM-first + deterministic regex fallback, 50-state normalization, credit score bucketing |
+| Layer 2: Code Executors | `src/executors/decide.py` | 166 | 100% deterministic: `create_borrower`, `create_lead`, `match_officer`, `generate_quote`, rate matrix, amortization formula |
+| Layer 2: Decision Nodes | `src/state_machine.py` | 350 | Phase-aware routing, return stack, unified errorNode |
+| Layer 3: Response Generation | `src/executors/respond.py` | 85 | Deterministic response formatting, quote/leads/help templates |
+| LLM Gateway | `src/gateway.py` | 94 | JSON validation, retry budget (3 attempts), multi-model via `LLM_MODEL` env var |
+| Domain Model (YAML) | `config/domain_model.yaml` | 80 | Entity/State/Transition definitions as single source of truth |
+| Workflow Config | `config/workflow.yaml` | 34 | Strategy selections, env config, retry config |
+| Intent Definitions | `config/intents.yaml` | 75 | 7 custom intents with examples and required entities |
+| Permission Model | `src/state_machine.py` | `_handle_borrower`/`_handle_officer` | Intent-based routing enforces role separation |
+| Knowledge Pool (RAG) | `src/knowledge.py` | 147 | 20 mortgage FAQ docs, keyword retrieval, fallback to support |
+| Privacy Relay | `src/state_machine.py` | `_officer_ask_borrower` etc. | Contact masking, RevealRequestModel, $35 payment gate |
+| Test Suite | `tests/test_functional.py` | 34 scenarios | Deterministic MockGateway, 举一反三 edge cases |
+| Simulated LLM Tests | `tests/test_simulated.py` | SimClient with real LLM personas |
+
+**File size compliance:** All files ≤ 350 lines, all methods ≤ 50 lines (per project principle #7).
