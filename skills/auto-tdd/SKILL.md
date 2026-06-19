@@ -286,9 +286,10 @@ During any phase, agents may discover new issues. These are **immediately** adde
 4. **Judge cites spec.** Agent-C rulings must reference specific spec sections.
 5. **Every failure is a task.** If a test fails, it becomes a tracked task with priority.
 6. **Quality is not optional.** Agent-D runs after every test pass. Its findings become new tasks.
-7. **Commit with proof.** Every commit message includes the number of passing tests and the current tier.
-8. **User requirements are binding.** If the user said "do X," X must be done. If it can't be done, explain why and offer alternatives — don't silently drop it.
-9. **Self-audit every 30 minutes.** If no progress in the last interval, analyze why and add corrective tasks.
+7. **Commit incrementally.** Commit after every meaningful change — each bug fix, each test added, each refactor. Do NOT batch unrelated changes into one commit. The PR can bundle everything at the end.
+8. **Commit with proof.** Every commit message includes the number of passing tests and the current tier.
+9. **User requirements are binding.** If the user said "do X," X must be done. If it can't be done, explain why and offer alternatives — don't silently drop it.
+10. **Self-audit every 30 minutes.** If no progress in the last interval, analyze why and add corrective tasks.
 
 ## Sources
 
