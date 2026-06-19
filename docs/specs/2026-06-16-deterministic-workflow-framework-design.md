@@ -17,7 +17,7 @@
 | 2026-06-17 | 0.7.0 | Add Context Hydration layer: pre-processing step loads history, state, session, external entities before three-layer execution |
 | 2026-06-17 | 0.8.0 | Update Related Design Documents with all child specs; add Document Tree section; fill missing table cell |
 | 2026-06-18 | 0.9.0 | Update `ToolMeta.type` enum to include `a2a` and `sdk` per Decision 24; sync document tree with latest specs |
-| 2026-06-19 | 0.10.0 | Add reference implementation mapping (mfangdai-agent) — see Appendix B |
+| 2026-06-19 | 0.10.0 | Add reference implementation mapping (mfangdai-agent) — see Appendix A.5 |
 
 ---
 

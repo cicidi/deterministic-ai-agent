@@ -322,9 +322,10 @@ Options B and C use state context to scope the fallback rules. Option A injects 
 
 Every extract call produces an `ExtractionResult` containing typed `ExtractedIntentPayload` objects. Each intent maps to a subclass.
 
-**Base class (Python dataclass):**
+**Base class (illustrative pseudo-code — not production implementation):**
 
 ```python
+# PSEUDO-CODE — illustrative only; shows shape/intent of the data model
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -336,9 +337,10 @@ class ExtractedIntentPayload:
     confidence: float = 0.0
 ```
 
-**Payload subclasses:**
+**Payload subclasses (illustrative pseudo-code):**
 
 ```python
+# PSEUDO-CODE — illustrative only; shows shape/intent of the data model
 @dataclass
 class ConfirmIntentPayload(ExtractedIntentPayload):
     fields: dict[str, bool] = field(default_factory=dict)
@@ -360,9 +362,10 @@ class RateCheckPayload(ExtractedIntentPayload):
     field_values: dict[str, Any] = field(default_factory=dict)
 ```
 
-**ExtractionResult wrapper:**
+**ExtractionResult wrapper (illustrative pseudo-code):**
 
 ```python
+# PSEUDO-CODE — illustrative only; shows shape/intent of the data model
 @dataclass
 class ExtractionResult:
     msg_id: str
@@ -386,6 +389,7 @@ After the Extract node produces payloads, a guardrail validates each `field_valu
 1. **Field name existence check** — every key must map to an actual field in the `AgentState` dataclass. This is analogous to Jackson `ObjectMapper` validating JSON keys against a POJO. The validation uses a whitelist derived from `AgentState.__dataclass_fields__`:
 
 ```python
+# PSEUDO-CODE — illustrative only; shows shape/intent of guardrail logic
 VALID_AGENT_FIELDS: set[str] = {
     "loan_purpose", "address", "postal_code",
     "loan_amount", "home_value", "mortgage_product", "phone",
@@ -408,6 +412,7 @@ def validate_payload_fields(payload: ExtractedIntentPayload):
 The framework uses a dispatch map to instantiate the correct payload class for each intent:
 
 ```python
+# PSEUDO-CODE — illustrative only; shows shape/intent of the dispatch pattern
 INTENT_PAYLOAD_MAP = {
     "confirm":              ConfirmIntentPayload,
     "decline":              DeclineIntentPayload,
@@ -846,6 +851,7 @@ Every LLM call within the extraction pipeline (and across the framework) produce
 ### 11.1 Audit Record Schema
 
 ```python
+# PSEUDO-CODE — illustrative only; shows shape/intent of the audit record schema
 from dataclasses import dataclass
 from datetime import datetime, timezone
 

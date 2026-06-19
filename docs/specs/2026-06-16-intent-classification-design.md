@@ -296,6 +296,8 @@ Intent classification is not a single-message operation. The LLM prompt must inc
 The framework includes the **last 3 user messages + last 3 agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
 
 > **Note:** Intent classification input also includes `agentState.phase` (e.g., `collect_lead_purpose`, `check_rates`, `collect_financial_profile`). The current workflow phase provides state-aware context that helps the classifier disambiguate intents — for example, "I want to change that" in the `collect_lead_purpose` phase likely refers to modifying loan amount, while in the `check_rates` phase it likely refers to getting current rates.
+>
+> **Note on phase names:** The phase names used in this spec's examples come from the mortgage-lead domain (`collect_lead_purpose`, `collect_financial_profile`, etc.). The state-machine spec uses home-insurance domain examples (e.g., `collect_property_info`). These are separate example domains; phase names are always domain-specific and defined in the workflow YAML. The concept of `agentState.phase` is the same across both — only the domain vocabulary differs.
 
 ### 3.2 Edge Case Coverage
 

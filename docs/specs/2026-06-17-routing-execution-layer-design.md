@@ -705,6 +705,8 @@ Errors are categorized for **audit logging**, not for separate routing paths. Th
 
 ### 6.5 errorNode Interface (Canonical Definition)
 
+> **This is the canonical, authoritative definition of errorNode.** All other spec documents (state-machine, extraction-layer, response-generation) that reference errorNode strategies MUST cross-reference this section as the single source of truth. Any discrepancy between this section and another spec's mention of errorNode is a spec bug — this section takes precedence.
+
 The `errorNode` is a unified error handling node that receives all errors from all nodes — this is the single source of truth. All other specs that reference errorNode strategies MUST cross-reference this section.
 
 Its contract:

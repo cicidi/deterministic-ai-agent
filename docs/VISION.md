@@ -234,6 +234,7 @@ docs/specs/
 ├── 2026-06-17-conversation-lifecycle.md                     ← child of HLD
 ├── 2026-06-17-observability-monitoring.md                   ← child of HLD
 ├── 2026-06-17-cicd-jenkins-pipeline.md                      ← child of HLD
+├── 2026-06-17-llm-gateway.md                                ← child of HLD
 ├── 2026-06-17-rate-limiting.md                              ← child of HLD
 ├── 2026-06-17-widget-templates.md                           ← child of HLD
 ├── 2026-06-18-rag-interface.md                           ← child of HLD
