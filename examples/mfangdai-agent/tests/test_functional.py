@@ -59,18 +59,41 @@ class MockGateway(Gateway):
         if "offer" in msg or "give" in msg or ("6." in msg and "%" in msg):
             return IntentClassificationResult(intent="submit_quote", confidence=1.0, entities={"interest_rate": 6.5})
 
-        # Borrower: extract entities from message
+        # Loan officer: providing registration info (NMLS, licensing)
+        if "nmls" in msg or "licensed" in msg:
+            entities = {}
+            if "texas" in msg or " tx" in msg:
+                entities["state"] = "TX"
+            if "florida" in msg or " fl" in msg:
+                entities["state"] = "FL"
+            if "california" in msg or " ca" in msg:
+                entities["state"] = "CA"
+            return IntentClassificationResult(
+                intent="register_loan_officer", confidence=1.0, entities=entities
+            )
+
+        # Borrower: extract entities from message (context-aware)
         entities = {}
-        if "800000" in msg or "800k" in msg or "800,000" in msg:
-            entities["home_value"] = 800000
-        if "500000" in msg or "500k" in msg:
-            entities["home_value"] = 500000
-        if "300000" in msg or "300k" in msg:
-            entities["home_value"] = 300000
-        if "400000" in msg or "400k" in msg:
-            entities["loan_amount"] = 400000
-        if "200000" in msg or "200k" in msg:
-            entities["loan_amount"] = 200000
+
+        # Home value: messages with "home", "worth", "property", "value"
+        if any(w in msg for w in ("home", "worth", "property", "value")):
+            if "800000" in msg or "800k" in msg:
+                entities["home_value"] = 800000
+            elif "500000" in msg or "500k" in msg:
+                entities["home_value"] = 500000
+            elif "300000" in msg or "300k" in msg:
+                entities["home_value"] = 300000
+
+        # Loan amount: messages with "loan", "borrow", "need"
+        if any(w in msg for w in ("loan", "borrow", "need")):
+            if "400000" in msg or "400k" in msg:
+                entities["loan_amount"] = 400000
+            elif "300000" in msg or "300k" in msg:
+                entities["loan_amount"] = 300000
+            elif "200000" in msg or "200k" in msg:
+                entities["loan_amount"] = 200000
+
+        # State
         if "california" in msg or msg.endswith(" ca"):
             entities["state"] = "CA"
         if "nevada" in msg or msg.endswith(" nv"):
@@ -253,3 +276,81 @@ def test_scenario_check_quote_status(agent):
 
     resp, state = _step(agent, state, "What's the status of my application?", user_id, utype, "Dave")
     assert "submitted" in resp.lower() or "review" in resp.lower() or "lead" in resp.lower()
+
+
+# ─────────────────────────────────────────────────────────────
+# Scenario 7: Agent explains product to new loan officer,
+#             encourages registration with basic info (NMLS, email, states)
+# ─────────────────────────────────────────────────────────────
+def test_scenario_agent_promotes_to_loan_officer(agent):
+    """New loan officer asks about the product — agent explains and encourages registration."""
+    user_id, utype = "tony_ft", "loan_officer"
+    state = AgentState(user_id=user_id, user_type=utype, user_name="Tony")
+
+    # Tony asks what the platform offers
+    resp, state = _step(agent, state, "Hi, I'm a loan officer. What does your platform offer?", user_id, utype, "Tony")
+    # Should mention leads, quotes, or registration
+    assert any(w in resp.lower() for w in ("lead", "quote", "regist", "view"))
+
+    # Tony says he wants to register
+    resp, state = _step(agent, state, "I want to register as a loan officer", user_id, utype, "Tony")
+    # Should ask for NMLS, email, or licensed states
+    assert any(w in resp.lower() for w in ("nmls", "email", "license", "state"))
+
+    # Tony provides partial registration info
+    resp, state = _step(agent, state, "My NMLS is 123456 and I'm licensed in Texas and Florida", user_id, utype, "Tony")
+    # Should acknowledge or prompt for more info (email still needed)
+    assert any(w in resp.lower() for w in ("nmls", "regist", "email", "complete"))
+
+
+# ─────────────────────────────────────────────────────────────
+# Scenario 8: Lead flows to loan officer who submits a quote,
+#             then borrower receives the officer's quote
+# ─────────────────────────────────────────────────────────────
+def test_scenario_lead_to_officer_quote_roundtrip(agent):
+    """Borrower creates lead → officer sees it → officer submits quote → borrower gets it."""
+    # Step 1: Borrower completes a full lead flow
+    alice_id, alice_type = "alice_rnd", "borrower"
+    alice_state = AgentState(user_id=alice_id, user_type=alice_type, user_name="Alice")
+    resp, alice_state = _step(agent, alice_state, "Hello", alice_id, alice_type, "Alice")
+    resp, alice_state = _step(agent, alice_state, "I want mortgage rates", alice_id, alice_type, "Alice")
+    resp, alice_state = _step(agent, alice_state, "I'm buying a home", alice_id, alice_type, "Alice")
+    resp, alice_state = _step(agent, alice_state, "Home is worth 500000", alice_id, alice_type, "Alice")
+    resp, alice_state = _step(agent, alice_state, "Need 300000 loan", alice_id, alice_type, "Alice")
+    resp, alice_state = _step(agent, alice_state, "In California", alice_id, alice_type, "Alice")
+    resp, alice_state = _step(agent, alice_state, "Credit score 720", alice_id, alice_type, "Alice")
+    assert alice_state.phase == "completed"
+    assert "%" in resp
+    assert "$" in resp
+
+    # Step 2: Loan officer Mike checks for leads
+    mike_id, mike_type = "mike_rnd", "loan_officer"
+    mike_state = AgentState(user_id=mike_id, user_type=mike_type, user_name="Mike")
+    resp, mike_state = _step(agent, mike_state, "Show me available leads in California", mike_id, mike_type, "Mike")
+    assert "lead" in resp.lower() or "available" in resp.lower()
+
+    # Step 3: Mike submits a quote (simulated via agent's submit_quote intent)
+    resp, mike_state = _step(agent, mike_state, "I can offer 6.5% for this lead", mike_id, mike_type, "Mike")
+    assert "quote" in resp.lower() or "forward" in resp.lower() or "received" in resp.lower()
+
+
+# ─────────────────────────────────────────────────────────────
+# Scenario 9: Rate matrix simulated tool test
+# ─────────────────────────────────────────────────────────────
+def test_scenario_rate_matrix_tool(agent):
+    """Verify the simulated rate matrix returns correct rates for different credit scores."""
+    from src.executors.decide import _get_simulated_rate, _calculate_monthly_payment
+
+    # Best credit → lowest rate
+    assert _get_simulated_rate("800_plus") == 6.0
+    # Mid credit → mid rate
+    assert _get_simulated_rate("700_719") == 6.7
+    # Poor credit → highest rate
+    assert _get_simulated_rate("below_620") == 8.0
+    # Unknown range → default
+    assert _get_simulated_rate("mystery") == 7.0
+
+    # Payment calculation sanity check
+    p1 = _calculate_monthly_payment(400000, 6.0, 360)
+    p2 = _calculate_monthly_payment(400000, 8.0, 360)
+    assert p2 > p1  # higher rate = higher payment

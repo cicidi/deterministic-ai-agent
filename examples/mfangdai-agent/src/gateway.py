@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "deepseek-v4"
+DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 
 
@@ -39,13 +39,30 @@ class Gateway:
         output_schema: type[BaseModel],
         temperature: float = 0,
     ) -> Any:
-        """Call LLM with structured output, retry on failure."""
-        llm_with_schema = self.llm.with_structured_output(output_schema)
+        """Call LLM with structured output via prompt-based JSON, retry on failure."""
+        json_prompt = (
+            f"{prompt}\n\n"
+            f"Respond ONLY with valid JSON matching this schema: {output_schema.model_json_schema()}\n"
+            f"Do NOT include markdown fences, explanations, or extra text. Output raw JSON only."
+        )
         last_error = None
         for attempt in range(1, self.max_retries + 1):
             try:
-                result = llm_with_schema.invoke(prompt)
-                return result
+                llm_json = ChatOpenAI(
+                    model=self.model,
+                    base_url=self.base_url,
+                    api_key=self.api_key,
+                    temperature=temperature,
+                )
+                result = llm_json.invoke(json_prompt)
+                text = result.content.strip()
+                if text.startswith("```"):
+                    text = text.split("```")[1]
+                    if text.startswith("json"):
+                        text = text[4:]
+                    text = text.strip()
+                parsed = json.loads(text)
+                return output_schema.model_validate(parsed)
             except Exception as e:
                 last_error = e
                 logger.warning(
