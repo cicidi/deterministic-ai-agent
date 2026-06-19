@@ -38,13 +38,9 @@ Transitions + guards              transform_strategy
 2. **Product-agnostic models** — same domain model across different implementations
 3. **Skill-driven generation** — a downstream skill can interview a developer to fill in the domain model, then the framework provides sensible defaults for the how
 
-### 1.1 Implementation Approaches
+### 1.1 Implementation Approach
 
-Three architectural options for authoring domain models. All three share the same entity/state/transition schema; they differ in *how* the entity field definitions are authored and consumed.
-
-#### Option A: OpenAPI Schema (Recommended)
-
-Entity fields are defined using [OpenAPI 3.1 Schema Objects](https://spec.openapis.org/oas/latest.html#schema-object) (JSON Schema dialect). The framework reads `components/schemas/` directly — no translation layer needed.
+Domain entities are defined using [OpenAPI 3.1 Schema Objects](https://spec.openapis.org/oas/latest.html#schema-object) (JSON Schema dialect). The framework reads `components/schemas/` directly — no translation layer needed.
 
 ```yaml
 # domain-models/home-insurance.yaml — OpenAPI components/schemas
@@ -118,80 +114,7 @@ components:
       entity: QuoteRequest
 ```
 
-**Pros:** Industry-standard format (JSON Schema). Full ecosystem: validators, code generators, IDE auto-complete for YAML/JSON. `$ref` enables schema composition without duplication. OpenAPI tooling produces interactive docs (Swagger UI). Downstream API contracts are defined in the same format as domain entities.
-
-**Cons:** Slightly more verbose than flat YAML for simple schemas. Requires understanding of `$ref` resolution rules for nested schemas.
-
-#### Option B: Flat YAML Domain Model
-
-Entities are defined as flat field lists using a custom YAML dialect. Every field is a top-level key with framework-specific annotations (`deterministic_fallback`, `transform`, `examples`).
-
-```yaml
-entities:
-  property_info:
-    fields:
-      property_type: { type: enum, values: [apartment, house, villa], required: true }
-      address:       { type: string, required: true, min_length: 5 }
-      postal_code:   { type: string, pattern: "^[0-9]{6}$" }
-      building_age:  { type: int, range: { min: 0, max: 200 } }
-```
-
-**Pros:** Simple to read and write. LLM extraction prompts map 1:1 to field descriptions.
-
-**Cons:** Custom format — no tooling ecosystem. No `$ref` for schema reuse. No compound field support. Framework must maintain a translation layer from custom dialect to JSON Schema for downstream consumption.
-
-#### Option C: Code-First Pydantic Models
-
-Entities are defined as Python Pydantic models. The YAML domain model is auto-generated.
-
-```python
-from pydantic import BaseModel, Field
-from typing import Literal
-
-class Address(BaseModel):
-    street: str = Field(min_length=3)
-    city: str
-    province: str
-    postal_code: str = Field(pattern=r"^[A-Z]\d[A-Z]\s?\d[A-Z]\d$")
-
-class UserInfo(BaseModel):
-    first_name: str = Field(min_length=1)
-    last_name: str = Field(min_length=1)
-    email: str
-    phone: str | None = Field(pattern=r"^\+?1?\d{10}$")
-```
-
-**Pros:** Full IDE support. JSON Schema export built into Pydantic v2+.
-
-**Cons:** Requires code-generation step. Non-Python developers cannot author directly.
-
-```yaml
-# Auto-generated domain model YAML
-entities:
-  property_info:
-    fields:
-      property_type: { type: enum, values: [apartment, house, villa], required: true }
-      address:       { type: string, required: true, min_length: 5 }
-      postal_code:   { type: string, required: true, pattern: "^\\d{6}$" }
-      building_age:  { type: int, required: true, range: { min: 0, max: 200 } }
-```
-
-**Pros:** Full IDE support (autocomplete, type-checking, refactoring). Validation logic is native Python. Pydantic's built-in serialization produces structured outputs suitable for LangGraph state.
-
-**Cons:** Requires a code-generation step. Non-Python developers cannot author or review the domain model. Generated YAML may be less readable than hand-crafted YAML.
-
-### Comparison Matrix
-
-| Dimension | Option A: OpenAPI Schema | Option B: Flat YAML | Option C: Code-First |
-|-----------|------------------------|-------------------|----------------------|
-| **Tooling Ecosystem** | High — validators, codegen, Swagger UI, IDE plugins | Low — custom parsing only | High — Pydantic ecosystem, IDE support |
-| **Schema Composition** | High — `$ref` across schemas | Low — flat field lists, no reuse | High — Python inheritance + composition |
-| **Compound Fields** | High — native `object` type + `$ref` | Low — flat only, no nesting | High — Pydantic nested models |
-| **Human Readability** | High — standard JSON Schema, widely recognized | High — simple YAML | Low — source is Python, not YAML |
-| **Industry Standard** | High — OpenAPI is an industry standard | Low — custom format | Medium — JSON Schema export available |
-| **LLM Structured Output** | Direct — auto-generate JSON Schema for LLM output guardrails | Indirect — framework translates custom format | Direct — Pydantic `.model_json_schema()` |
-
-**Default recommendation: Option A (OpenAPI Schema).** The domain model definition format is OpenAPI 3.1 Schema (JSON Schema). This provides an industry-standard, toolchain-rich foundation that serves both internal data modeling AND downstream API contracts. Option C (Code-First) is available for teams that prefer Python-native development — Pydantic v2+ can export JSON Schema for downstream consumption. Option B (Flat custom YAML) is no longer recommended for new workflows.
+Industry-standard format. Full ecosystem: validators, code generators, IDE auto-complete, Swagger UI. `$ref` enables schema composition without duplication. Downstream API contracts defined in the same format as domain entities.
 
 ## 2. Domain Model Schema
 
