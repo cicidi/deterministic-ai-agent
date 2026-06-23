@@ -1,6 +1,6 @@
 # Three-Tier Agent Testing Methodology
 
-**Version:** 0.1.0
+**Version:** 0.2.1
 **Scope:** Testing strategy for agents built on the three-layer deterministic workflow framework. Industry-agnostic. Applies to any domain (fintech, healthcare, legal, government).
 
 ---
@@ -46,6 +46,38 @@ A single tier is insufficient:
 
 Together, the three tiers isolate failures: Tier 1 tells you "is my code wrong?", Tier 2 tells you "can the LLM understand my users?", Tier 3 tells you "does the whole system work?"
 
+### 2.2 Layer Coverage Matrix
+
+The deterministic workflow framework has three layers. Each test tier covers different layers:
+
+| Layer | What it does | Tier 1 | Tier 2 | Tier 3 |
+|-------|-------------|--------|--------|--------|
+| **Layer 1: NLU** | Intent classification + entity extraction (LLM) | Mocked | **Tested** | **Tested** |
+| **Layer 2: Decide** | State machine routing + business logic (deterministic code) | **Tested** | **Tested** | **Tested** |
+| **Layer 3: Respond** | Response generation + goal checker (deterministic code) | **Tested** | **Tested** | **Tested** |
+
+**Per-tier layer focus:**
+
+```
+Tier 1: Tests Layer 2 + Layer 3 code correctness. Layer 1 is mocked.
+        Question answered: "Given correct intent X and entities Y, does the code do the right thing?"
+
+Tier 2: Tests Layer 1 LLM accuracy. Layer 2 + 3 run normally but are secondary.
+        Question answered: "Given a real user message, can the LLM correctly classify it?"
+
+Tier 3: Tests all three layers together under stochastic LLM behavior.
+        Question answered: "Does the complete system work end-to-end, across multiple runs?"
+```
+
+**Why this separation matters:**
+
+| Problem | Caught by | Example |
+|---------|-----------|---------|
+| Bug in `_calculate_monthly_payment` formula | Tier 1 | Test asserts payment = $1,896.20 for $300k @ 6.5% |
+| LLM misclassifies "I wanna refi" as `ask_about_rates` instead of `provide_loan_info` | Tier 2 | Script expects intent=provide_loan_info with entities={loan_purpose: refinance} |
+| LLM classifies correctly but stalls in a 10-turn loop asking the same question | Tier 3 | Loop detection fires: same intent 3+ turns with no state change |
+| Code rejects a correctly-extracted entity | Tier 2 or 3 | LayerTrace shows LLM extracted `{home_value: 800000}` but `phase` didn't advance |
+
 ## 3. Tier 1: Logic Tests
 
 ### 3.1 Architecture
@@ -64,6 +96,47 @@ Replace the real LLM with a keyword-based classifier that returns pre-determined
 - Return correct intents for every test message
 - Return appropriate entities for entity-extraction tests
 - Be deterministic — same message → same intent every run
+
+**MockGateway template:**
+
+```python
+class MockGateway:
+    """Drop-in replacement for the real LLM Gateway. Keyword-based, deterministic."""
+
+    def _extract_message(self, prompt: str) -> str:
+        """Extract just the user message from the classify prompt template."""
+        marker = 'User message: "'
+        if marker in prompt:
+            start = prompt.index(marker) + len(marker)
+            end = prompt.index('"', start)
+            return prompt[start:end]
+        return prompt
+
+    def call(self, prompt: str, output_schema: type, temperature: float = 0):
+        """
+        Return a pre-determined intent based on keyword matching.
+        Developer MUST replace the keyword rules with their own domain's intents.
+        """
+        msg = self._extract_message(prompt).lower()
+
+        # --- REPLACE BELOW with your domain's intent keywords ---
+        if "hello" in msg or "hi" in msg:
+            return output_schema(intent="greet", confidence=1.0)
+        if "help" in msg:
+            return output_schema(intent="help", confidence=1.0)
+        # ... add rules for each intent in your system ...
+
+        # Default: extract entities or return ask_about_rates
+        entities = {}
+        # ... add entity extraction rules ...
+        return output_schema(intent="provide_loan_info" if entities else "ask_about_rates",
+                            confidence=1.0, entities=entities)
+```
+
+**Anti-patterns for MockGateway:**
+- Don't use real API keys — MockGateway must never make network calls
+- Don't make it too smart — keyword matching should be simple. Overly complex mocks hide LLM failures
+- Don't return `confidence=1.0` for every call — include at least one test with `confidence=0.4` to exercise low-confidence paths
 
 ### 3.3 What to Test
 
@@ -207,6 +280,55 @@ PERSONA = {
 }
 ```
 
+**SimClient template:**
+
+```python
+class SimClient:
+    """LLM-powered simulated user. Takes a persona, runs conversation loop."""
+
+    def __init__(self, gateway, persona: dict):
+        self.gateway = gateway
+        self.persona = persona
+        self.history = []
+
+    def _build_prompt(self, agent_response: str) -> str:
+        """Build the system prompt from persona template + history."""
+        prompt = self.persona["system_prompt"].format(**self.persona["situation"])
+        for turn in self.history[-6:]:  # last 6 turns for context window
+            prompt += f"\nUser: {turn['user']}\nAgent: {turn['agent']}"
+        prompt += f"\n\nLast agent message: {agent_response}"
+        prompt += "\n\nYour natural response (1-2 sentences, stay in character):"
+        return prompt
+
+    def next_message(self, agent_response: str) -> str:
+        """Generate the next user message based on persona and conversation."""
+        prompt = self._build_prompt(agent_response)
+        return self.gateway.call_text(prompt, temperature=0.3)
+
+    def record_turn(self, user_msg: str, agent_response: str):
+        self.history.append({"user": user_msg, "agent": agent_response})
+
+    def run(self, agent, opening_message: str, max_turns: int = 15) -> dict:
+        """Run a complete conversation. Returns {success, turns, state}."""
+        state = AgentState(user_type=self.persona["user_type"])
+        user_msg = opening_message
+
+        for turn in range(max_turns):
+            result = agent.process(user_msg, "sim_user", self.persona["user_type"],
+                                   self.persona.get("name", ""), state)
+            self.record_turn(user_msg, result["response"])
+            state = result["state"]
+
+            if result["phase"] == "completed":
+                return {"success": True, "turns": self.history, "state": state}
+            if result["phase"] == "error":
+                return {"success": False, "turns": self.history, "state": state, "error": state.error}
+
+            user_msg = self.next_message(result["response"])
+
+        return {"success": False, "turns": self.history, "state": state, "phase": state.phase}
+```
+
 ### 5.3 Run Configuration
 
 Each persona must be run multiple times (N ≥ 3) to account for LLM variance:
@@ -220,13 +342,13 @@ for persona in PERSONAS:
 
 ### 5.4 Metrics Collected Per Persona
 
-| Metric | Definition | Target |
-|--------|-----------|--------|
-| `completion_rate` | % runs that reach the success criteria | ≥70% |
-| `avg_turn_count` | Mean turns to completion (or max if failed) | ≤12 |
-| `loop_count` | Number of runs where same intent repeated >3 turns | 0 |
-| `error_rate` | % runs that hit the errorNode | ≤10% |
-| `turn_distribution` | Histogram of turn counts across all runs | — |
+| Metric | Definition | Pass | Warn | Fail |
+|--------|-----------|------|------|------|
+| `completion_rate` | % runs that reach the success criteria | ≥70% | 50-69% | <50% |
+| `avg_turn_count` | Mean turns to completion (or max if failed) | ≤12 | 13-15 | >15 |
+| `loop_count` | Number of runs where same intent repeated >3 turns | 0 | 1 | >1 |
+| `error_rate` | % runs that hit the errorNode | ≤10% | 11-20% | >20% |
+| `turn_distribution` | Histogram of turn counts across all runs | — | — | — |
 
 ### 5.5 Loop Detection
 
@@ -324,6 +446,124 @@ For each mocked API, track a GitHub issue for the real integration. The mock int
 | Tier 3 | Weekly / release | scheduled | Yes |
 
 Tier 1 is the gatekeeper. No code merges if Tier 1 fails. Tier 2 and Tier 3 are quality monitors — their results inform but don't block.
+
+## 10. Test File Structure
+
+```
+tests/
+├── tier1/                    # Logic tests, deterministic, no API key
+│   ├── test_workflow.py      # Happy path + variants (举一反三)
+│   ├── test_edge_cases.py    # Corrections, diversions, boundaries, vague input
+│   └── test_error_paths.py   # Low confidence, missing entities, DB failures
+├── tier2/                    # LLM accuracy tests
+│   ├── scenarios/            # One file per scenario or group
+│   │   ├── s01_happy_path_type_a.py
+│   │   ├── s02_happy_path_type_a_variant.py
+│   │   ├── s08_correction.py
+│   │   └── ...
+│   └── conftest.py           # Shared fixtures, LiveAgent, metrics collector
+├── tier3/                    # Completion tests
+│   ├── personas/
+│   │   ├── p01_persona_a.py
+│   │   ├── p02_persona_b.py
+│   │   └── ...
+│   └── conftest.py           # SimClient, run harness, metrics aggregator
+├── mocks/                    # Shared mock implementations
+│   ├── mock_gateway.py       # MockGateway base class
+│   ├── mock_sms.py           # SMS API mock
+│   └── mock_external_api.py  # Other external API mocks
+└── sim_client.py             # SimClient for Tier 3 (shared across personas)
+```
+
+## 11. Per-Tier Scenario Allocation
+
+| Tier | MVP Count | Expanded Count | What to Test |
+|------|-----------|----------------|--------------|
+| Tier 1 | 8-10 | 20-25 | Code paths: every state transition, every entity field exhaustion check, error paths |
+| Tier 2 | 20 | 50+ | One script per intent + one per user type + edge case variants |
+| Tier 3 | 3-5 personas × 3 runs | 8-10 personas × 5 runs | End-to-end completion, loop detection, indirect communication |
+
+Tier 1 scenarios are about **code path coverage** — they don't need LLM, so they can be more numerous and faster. Tier 2 scenarios are about **LLM understanding coverage** — one per intent ensures every classification path is tested with real LLM. Tier 3 scenarios are about **stochastic system behavior** — fewer runs but each run is a complete conversation.
+
+**Single-user-type adaptation:** If your agent has only 1 user type, allocate all scenarios to that type, varying the workflow dimension instead of the user-type dimension. If you have 3+ user types, split the catalog proportionally. The Type A / Type B structure in Section 6.1 is illustrative, not prescriptive.
+
+## 12. Multi-Turn State Assertions
+
+Conversation state accumulates across turns. Tests must verify state persistence:
+
+```python
+# After turn 2: verify initial data collected
+assert state.collected_data == {"loan_purpose": "purchase"}
+assert state.phase == "collecting_info"
+
+# After turn 3: new data added, old data preserved
+assert state.collected_data == {"loan_purpose": "purchase", "home_value": 500000}
+
+# After turn 4 (diversion to help): data MUST survive
+assert state.collected_data["loan_purpose"] == "purchase"  # still there
+
+# After turn 6 (completion): full state check
+assert state.phase == "completed"
+assert state.lead_id is not None
+assert state.quote is not None
+assert state.quote["interest_rate"] > 0
+```
+
+**State corruption detection checklist:**
+- After a help or greeting diversion, is `collected_data` intact?
+- After a correction, did the new value overwrite the old one correctly?
+- After completion, are `lead_id`, `quote`, and `borrower_id` all set?
+- Does `current_lead_id` track the correct lead after switching?
+
+## 13. API Mock Code Templates
+
+Mock external APIs with classes that implement the same interface but no network calls:
+
+```python
+class MockSMSClient:
+    """Drop-in replacement for SMS API. Same interface, zero network."""
+    def __init__(self):
+        self.sent = []
+
+    def send(self, to: str, body: str) -> dict:
+        self.sent.append({"to": to, "body": body, "timestamp": datetime.utcnow()})
+        return {"status": "sent", "message_id": f"mock-{len(self.sent)}"}
+
+class MockBalanceLedger:
+    """In-memory balance ledger. Replaces payment processor API."""
+    def __init__(self, initial_balance: float = 0):
+        self.balance = initial_balance
+        self.transactions = []
+
+    def deduct(self, amount: float, reason: str) -> bool:
+        if self.balance < amount:
+            return False
+        self.balance -= amount
+        self.transactions.append({"type": "deduct", "amount": amount, "reason": reason})
+        return True
+
+    def recharge(self, amount: float) -> None:
+        self.balance += amount
+        self.transactions.append({"type": "recharge", "amount": amount})
+```
+
+**Injection strategy:** Use dependency injection — the agent accepts an optional `sms_client` or `balance_ledger` parameter that defaults to the real API client in production but receives the mock in tests. Avoid monkey-patching globals.
+
+## 14. Definition of Done
+
+Testing is complete when ALL of the following are satisfied:
+
+- [ ] All Tier 1 scenarios pass (MVP: 8-10, Expanded: 20-25)
+- [ ] All Tier 2 scripts pass with metrics at or above targets
+- [ ] ≥85% `intent_accuracy` across Tier 2 scripts
+- [ ] ≥3 Tier 3 personas, each run N≥3, all metrics at or above targets
+- [ ] `completion_rate` ≥70% across Tier 3 runs
+- [ ] `loop_count` = 0 (no infinite loops detected in Tier 3)
+- [ ] Domain model exhaustion checklist complete (Section 3.3)
+- [ ] One Tier 2 script exists per intent
+- [ ] One Tier 2 script exists per user type
+- [ ] One Tier 2 edge-case script exists per edge case class (correction, diversion, vague)
+- [ ] Every mock API has a corresponding GitHub issue for real integration
 
 ## 10. Sources
 
