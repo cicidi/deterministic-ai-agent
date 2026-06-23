@@ -1,6 +1,6 @@
 # Three-Tier Agent Testing Methodology
 
-**Version:** 0.2.2
+**Version:** 0.3.0
 **Scope:** Testing strategy for agents built on the three-layer deterministic workflow framework. Industry-agnostic. Applies to any domain (fintech, healthcare, legal, government).
 
 ---
@@ -21,13 +21,14 @@ The three-tier methodology separates these concerns: test the code without the L
 │ Runs: fast, deterministic, CI-safe, no API keys needed       │
 ├──────────────────────────────────────────────────────────────┤
 │ Tier 2: LLM Accuracy Tests                                   │
-│ Client: pre-written scripts  Server: real LLM                │
+│ Client: pre-written scripts  Server: real LLM (L1 only)      │
+│ Layer 3 (Response): hardcoded, deterministic strings         │
 │ Verifies: LLM can correctly classify and extract from        │
 │           realistic but controlled user messages             │
 │ Runs: with API keys, measures intent accuracy per turn       │
 ├──────────────────────────────────────────────────────────────┤
 │ Tier 3: Completion Tests                                     │
-│ Client: LLM (persona)        Server: real LLM                │
+│ Client: LLM (persona)        Server: L1 + L3 real LLM        │
 │ Verifies: end-to-end conversation success rate, turn count,  │
 │           loop detection, indirect multi-party communication  │
 │ Runs: with API keys, stochastic (run N times for confidence) │
@@ -48,25 +49,47 @@ Together, the three tiers isolate failures: Tier 1 tells you "is my code wrong?"
 
 ### 2.2 Layer Coverage Matrix
 
-The deterministic workflow framework has three layers. Each test tier covers different layers:
+The deterministic workflow framework has three layers. Each test tier covers different layers with different execution modes:
 
 | Layer | What it does | Tier 1 | Tier 2 | Tier 3 |
 |-------|-------------|--------|--------|--------|
-| **Layer 1: NLU** | Intent classification + entity extraction (LLM) | Mocked | **Tested** | **Tested** |
-| **Layer 2: Decide** | State machine routing + business logic (deterministic code) | **Tested** | **Tested** | **Tested** |
-| **Layer 3: Respond** | Response generation + goal checker (deterministic code) | **Tested** | **Tested** | **Tested** |
+| **Layer 1: NLU** | Intent classification + entity extraction (LLM) | Mocked | **Real LLM** | **Real LLM** |
+| **Layer 2: Decide** | State machine routing + business logic (deterministic code) | Real code | Real code | Real code |
+| **Layer 3: Respond** | Response generation + goal checker | **Hardcoded** | **Hardcoded** | **Real LLM** |
+
+**Key rule:** Layer 3 (Response Generation) only uses real LLM in Tier 3 tests. In Tier 1 and Tier 2, responses are deterministic hardcoded strings. This isolates Layer 1 LLM accuracy testing (Tier 2) from Layer 3 LLM variance.
 
 **Per-tier layer focus:**
 
 ```
-Tier 1: Tests Layer 2 + Layer 3 code correctness. Layer 1 is mocked.
-        Question answered: "Given correct intent X and entities Y, does the code do the right thing?"
+Tier 1: L1 mocked, L2 real code, L3 hardcoded.
+        Question: "Given correct intent X and entities Y, does the code do the right thing?"
 
-Tier 2: Tests Layer 1 LLM accuracy. Layer 2 + 3 run normally but are secondary.
-        Question answered: "Given a real user message, can the LLM correctly classify it?"
+Tier 2: L1 real LLM, L2 real code, L3 hardcoded.
+        Question: "Given a real user message, can the LLM correctly classify and extract?"
 
-Tier 3: Tests all three layers together under stochastic LLM behavior.
-        Question answered: "Does the complete system work end-to-end, across multiple runs?"
+Tier 3: L1 real LLM, L2 real code, L3 real LLM.
+        Question: "Does the complete system work end-to-end with all LLM components active?"
+```
+
+**Why Layer 3 is hardcoded in Tier 1 and Tier 2:**
+
+| Reason | Detail |
+|--------|--------|
+| Isolation | If Tier 2 tests Layer 1 accuracy but Layer 3 also uses LLM, a failure could be in either layer. Hardcoding L3 removes L3 as a variable. |
+| Speed | LLM calls for response generation add latency. Tier 1 and Tier 2 have many scenarios — keeping L3 hardcoded keeps test runs fast. |
+| Reproducibility | L3 LLM output varies between runs. Hardcoded L3 makes Tier 1 and Tier 2 perfectly reproducible. |
+
+**Layer 3's own unit tests:**
+
+Layer 3 response generation has its own test suite that uses real LLM, but these tests run **only when L3 code changes**, not on every test run:
+
+```
+Layer 3 Unit Tests (run on code change only):
+- Test: format_quote_response with LLM-generated natural language variants
+- Test: format_leads_response with LLM-generated summaries
+- Test: Response tone and professionalism (LLM evaluates LLM output)
+- Trigger: git diff on src/executors/respond.py → run L3 unit tests
 ```
 
 **Why this separation matters:**
@@ -74,9 +97,9 @@ Tier 3: Tests all three layers together under stochastic LLM behavior.
 | Problem | Caught by | Example |
 |---------|-----------|---------|
 | Bug in `_calculate_monthly_payment` formula | Tier 1 | Test asserts payment = $1,896.20 for $300k @ 6.5% |
-| LLM misclassifies "I wanna refi" as `ask_about_rates` instead of `provide_loan_info` | Tier 2 | Script expects intent=provide_loan_info with entities={loan_purpose: refinance} |
-| LLM classifies correctly but stalls in a 10-turn loop asking the same question | Tier 3 | Loop detection fires: same intent 3+ turns with no state change |
-| Code rejects a correctly-extracted entity | Tier 2 or 3 | LayerTrace shows LLM extracted `{home_value: 800000}` but `phase` didn't advance |
+| LLM misclassifies "I wanna refi" as `ask_about_rates` | Tier 2 | L3 hardcoded — failure is definitely in L1 classification |
+| Response text is factually wrong about APR | Layer 3 unit tests (on code change) | L3 generated "APR is 2%" when it should be 6.65% |
+| LLM classifies correctly but stalls in a 10-turn loop | Tier 3 | All layers use real LLM — loop detection catches systemic issues |
 
 ## 3. Tier 1: Logic Tests
 
