@@ -537,6 +537,8 @@ class FlakyMockGateway:
 
 ## 11. Test File Structure
 
+Tests MUST be organized into tier-specific directories. This is NOT optional — it ensures isolated test runs, separate DB files per tier, and clear CI/CD invocation.
+
 ```
 tests/
 ├── tier1/                    # Logic tests, deterministic, no API key
@@ -544,24 +546,42 @@ tests/
 │   ├── test_edge_cases.py    # Corrections, diversions, boundaries, vague input
 │   └── test_error_paths.py   # Low confidence, missing entities, DB failures
 ├── tier2/                    # LLM accuracy tests
-│   ├── scenarios/            # One file per scenario or group
-│   │   ├── s01_happy_path_type_a.py
-│   │   ├── s02_happy_path_type_a_variant.py
-│   │   ├── s08_correction.py
-│   │   └── ...
-│   └── conftest.py           # Shared fixtures, LiveAgent, metrics collector
+│   ├── conftest.py           # Shared fixtures (live_agent, metrics, needs_llm)
+│   ├── runner.py             # Tier2 script execution harness
+│   └── scenarios/
+│       ├── test_borrower_scenarios.py
+│       ├── test_officer_scenarios.py
+│       └── ...
 ├── tier3/                    # Completion tests
-│   ├── personas/
-│   │   ├── p01_persona_a.py
-│   │   ├── p02_persona_b.py
-│   │   └── ...
-│   └── conftest.py           # SimClient, run harness, metrics aggregator
-├── mocks/                    # Shared mock implementations
-│   ├── mock_gateway.py       # MockGateway base class
-│   ├── mock_sms.py           # SMS API mock
-│   └── mock_external_api.py  # Other external API mocks
-└── sim_client.py             # SimClient for Tier 3 (shared across personas)
+│   ├── conftest.py           # Shared fixtures (live_agent, t3_metrics, needs_llm)
+│   └── personas/
+│       ├── test_borrower_personas.py
+│       └── ...
+├── sim_client.py             # SimClient for Tier 3 (shared across personas)
+└── mocks/                    # Shared mock implementations
+    ├── mock_gateway.py       # MockGateway base class
+    ├── mock_sms.py           # SMS API mock
+    └── mock_external_api.py  # Other external API mocks
 ```
+
+**Why separate directories:**
+
+| Reason | Detail |
+|--------|--------|
+| Isolated DB files | Each tier uses a different SQLite file (`mfangdai_t1.db`, `mfangdai_t2.db`, `mfangdai_t3.db`) — prevents cross-tier data contamination |
+| CI/CD invocation | `pytest tests/tier1/` runs without API key. `pytest tests/tier2/` requires API key. No conditional skip logic needed at the file level. |
+| Parallel execution | `pytest -n auto tests/tier1/ tests/tier2/` — tiers can run in parallel with separate DBs |
+| Clear ownership | Developer knows which directory to add tests to without reading file contents |
+
+**DB file naming convention:**
+
+| Tier | DB File | Created by |
+|------|---------|-----------|
+| Tier 1 | `mfangdai_t1.db` | `tests/tier1/conftest.py` fixture |
+| Tier 2 | `mfangdai_t2.db` | `tests/tier2/conftest.py` fixture |
+| Tier 3 | `mfangdai_t3.db` | `tests/tier3/conftest.py` fixture |
+
+**Cleanup between runs:** Always delete DB files before running tests to prevent UNIQUE constraint violations from stale data:
 
 ## 12. Per-Tier Scenario Allocation
 
