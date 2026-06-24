@@ -316,7 +316,7 @@ NOT the old flat custom YAML format. States and transitions use `x-` extension p
 
 8. **A2A agent card.** Generate `config/a2a.yaml`. Minimal — identity + raw text interface + schema ref.
 
-9. **MCP server bridge.** Generate `config/mcp.yaml`. The MCP server is the bridge between AI assistants (Claude, ChatGPT) and the A2A agent. It has exactly ONE tool: `send_message`. The tool's description tells the AI assistant what the agent can do in natural language — for both user types. No structured parameters beyond message, user_id, user_type. The agent understands everything internally.
+9. **MCP server bridge.** Generate `config/mcp.yaml`. The MCP server is the bridge between AI assistants (Claude, ChatGPT) and the A2A agent. It has exactly ONE tool: `send_message`. The tool's description tells the AI assistant what the agent can do in natural language. If Claude impersonates a human user, use the same Keycloak OAuth tokens — MCP server handles auto-refresh of expired access tokens. Don't invent separate MCP auth; reuse the existing OAuth flow.
 
 ```yaml
 agentCard:
