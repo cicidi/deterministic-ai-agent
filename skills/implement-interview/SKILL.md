@@ -159,6 +159,8 @@ The following framework-level decisions use spec defaults. Do NOT ask the develo
 
 2. **Artifacts discovery:** Ask explicitly:
    - "Do you have existing API documentation, Postman collections, or test suites I should review?"
+   - "Are there existing MCP servers, REST APIs, GraphQL endpoints, or A2A agents this new agent needs to integrate with or replace?"
+   - "Is there an existing database or schema this agent needs to read/write? What kind (PostgreSQL, MySQL, etc.)? Any migration constraints?"
    - "Is there existing code (even in another language) that implements part of this?"
    - "Are there competitor products or reference systems I should understand?"
 
@@ -175,6 +177,7 @@ The following framework-level decisions use spec defaults. Do NOT ask the develo
 5. **Testing requirements check:**
    - "What test scenarios are most important to you? (beyond the happy path)"
    - "Should tests include edge cases like wrong values, corrections, and topic jumps?"
+   - "Do you want to follow the three-tier testing methodology (T1 logic + T2 LLM accuracy + T3 completion)?"
    - "Do you want simulated LLM-driven conversation tests in addition to deterministic ones?"
 
 6. **Output format check:**
@@ -326,6 +329,7 @@ Next: cd {dir} && pip install -r requirements.txt && python main.py
 - Never generate more than one question per message during the interview phase.
 - Maintain the time budget, but the **Completeness Verification phase** is mandatory regardless of time budget.
 - **"yolo aggressive" means move fast, not skip quality.** Never skip the completeness verification.
+- After code generation and contrarian review, if the contrarian finds gaps in the generated code, check if those gaps trace back to missing questions in the interview. Update this skill if the interview should have asked something it didn't. This closes the loop between interview quality and output quality.
 
 ## Anti-Patterns
 
