@@ -314,7 +314,9 @@ components:
 ```
 NOT the old flat custom YAML format. States and transitions use `x-` extension prefix (valid OpenAPI 3.1).
 
-8. **A2A agent card.** Generate `config/a2a.yaml`. Minimal — just identity, interface, and data model reference. The agent's interface is raw text (A2A). Callers send natural language; the agent classifies, extracts, and routes internally. No workflows, no tool schemas — those belong in the service layer.
+8. **A2A agent card.** Generate `config/a2a.yaml`. Minimal — identity + raw text interface + schema ref.
+
+9. **MCP server bridge.** Generate `config/mcp.yaml`. The MCP server is the bridge between AI assistants (Claude, ChatGPT) and the A2A agent. It has exactly ONE tool: `send_message`. The tool's description tells the AI assistant what the agent can do in natural language — for both user types. No structured parameters beyond message, user_id, user_type. The agent understands everything internally.
 
 ```yaml
 agentCard:
