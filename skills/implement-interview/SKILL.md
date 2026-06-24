@@ -314,7 +314,18 @@ components:
 ```
 NOT the old flat custom YAML format. States and transitions use `x-` extension prefix (valid OpenAPI 3.1).
 
-8. **A2A agent card.** Generate `config/a2a.yaml`. The agent's ONLY interface is natural language (A2A raw text). This is the core principle: the agent classifies intents, extracts entities, and routes workflows internally — callers just send raw messages. No MCP tools, no REST endpoints in the agent. MCP tools and REST APIs belong in the service layer, not the agent. The A2A card documents: agent identity, supported workflows with natural language triggers, entity schemas ($ref domain model), security config, and the single call method (`send_message`).
+8. **A2A agent card.** Generate `config/a2a.yaml`. Minimal — just identity, interface, and data model reference. The agent's interface is raw text (A2A). Callers send natural language; the agent classifies, extracts, and routes internally. No workflows, no tool schemas — those belong in the service layer.
+
+```yaml
+agentCard:
+  name: {product}
+  version: "1.0.0"
+  description: One-line summary.
+  interface: raw_text
+  call: send_message(message, user_id, user_type) -> str
+  schemas: { $ref: './domain_model.yaml' }
+  auth: api_key | oauth2_client_credentials
+```
 
 9. **Tests.** Mock LLM responses with `unittest.mock`. Test the happy path through the complete workflow. Assert correct state transitions and field population.
 
