@@ -12,6 +12,7 @@
 | 2026-06-17 | 0.1.0 | Initial CI/CD pipeline spec: Jenkins stages, mock/real LLM eval, environment promotion, rollback |
 | 2026-06-17 | 0.2.0 | Strip all Groovy implementation code; replace with YAML pipeline stage schemas; add declarative deploy descriptions; add Implementation Options comparison (Jenkins, GitHub Actions, GitLab CI) |
 | 2026-06-18 | 0.2.1 | Actually remove remaining Groovy code in §7.3 (was missed in v0.2.0); replace with declarative YAML pipeline description |
+| 2026-06-24 | 0.3.0 | Add Hetzner Terraform infrastructure, GitHub webhook integration, Tier 1/2/3 testing stages in Jenkinsfile |
 
 ---
 
@@ -937,6 +938,173 @@ pipeline:
 - [Response Generation](./2026-06-17-response-generation-layer-design.md) — Goal check 422 behavior (eval gate)
 - [Extraction Layer](./2026-06-17-extraction-layer-design.md) — Entity extraction (eval F1 metric)
 - [Intent Classification](./2026-06-16-intent-classification-design.md) — Intent accuracy (eval gate)
+- [Three-Tier Testing Methodology](./2026-06-19-three-tier-agent-testing-methodology.md) — Tier 1/2/3 test stages
+
+---
+
+## 10. Infrastructure: Hetzner Cloud
+
+Jenkins runs on a Hetzner CX32 VM (4 vCPU, 8GB, $10/mo). Provisioned via Terraform.
+
+### 10.1 Terraform
+
+```hcl
+terraform {
+  required_providers {
+    hcloud = { source = "hetznercloud/hcloud" }
+  }
+}
+
+provider "hcloud" {
+  token = var.hcloud_token
+}
+
+resource "hcloud_server" "jenkins" {
+  name        = "mfangdai-jenkins"
+  server_type = "cx32"
+  image       = "ubuntu-24.04"
+  location    = "ash"
+  user_data   = file("./jenkins-cloud-init.yaml")
+}
+
+resource "hcloud_firewall" "jenkins" {
+  name = "jenkins-fw"
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "8080"
+    source_ips = ["0.0.0.0/0"]  # Jenkins UI
+  }
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "22"
+    source_ips = ["YOUR_IP/32"]  # SSH — lock to your IP
+  }
+}
+
+resource "hcloud_server_network" "jenkins" {
+  server_id  = hcloud_server.jenkins.id
+  network_id = hcloud_network.internal.id
+}
+
+output "jenkins_url" {
+  value = "http://${hcloud_server.jenkins.ipv4_address}:8080"
+}
+```
+
+### 10.2 Cloud-Init (Jenkins auto-install)
+
+```yaml
+# jenkins-cloud-init.yaml
+#cloud-config
+packages:
+  - openjdk-17-jre-headless
+  - docker.io
+  - python3-pip
+  - git
+write_files:
+  - path: /etc/docker/daemon.json
+    content: '{"exec-opts": ["native.cgroupdriver=systemd"]}'
+runcmd:
+  - wget -q -O /usr/share/keyrings/jenkins-keyring.asc https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+  - echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" > /etc/apt/sources.list.d/jenkins.list
+  - apt-get update && apt-get install -y jenkins
+  - systemctl enable --now jenkins docker
+  - usermod -aG docker jenkins
+```
+
+VM is production-ready in one `terraform apply`.
+
+## 11. GitHub Integration
+
+### 11.1 GitHub Webhook (push triggers build automatically)
+
+**GitHub side:** Repo Settings → Webhooks → Add webhook:
+- Payload URL: `http://<jenkins-ip>:8080/github-webhook/`
+- Content type: `application/json`
+- Events: "Just the push event"
+- Secret: generate a random token
+
+**Jenkins side:** Jenkinsfile `triggers` block:
+
+```groovy
+pipeline {
+    agent any
+    
+    triggers {
+        githubPush()  // webhook — no polling delay
+    }
+
+    environment {
+        LLM_API_KEY = credentials('deepseek-api-key')
+    }
+
+    stages {
+        stage('Lint') {
+            steps { sh 'ruff check src/' }
+        }
+        stage('Test Tier 1') {
+            steps { sh 'rm -f *.db && pytest tests/tier1/ -q' }
+        }
+        stage('Test Tier 2') {
+            steps { 
+                script {
+                    if (env.LLM_API_KEY) {
+                        sh 'rm -f mfangdai_t2.db && pytest tests/tier2/ -q'
+                    } else {
+                        echo 'Tier 2 skipped — LLM_API_KEY not set'
+                    }
+                }
+            }
+        }
+        stage('Test Tier 3') {
+            steps {
+                script {
+                    if (env.LLM_API_KEY) {
+                        sh 'rm -f mfangdai_t3.db && pytest tests/tier3/ -q'
+                    }
+                }
+            }
+        }
+        stage('Build Docker') {
+            steps { sh 'docker build -t mfangdai-agent:${GIT_COMMIT[:8]} .' }
+        }
+        stage('Deploy Dev') {
+            steps { sh 'docker compose -f docker-compose.dev.yml up -d' }
+        }
+    }
+    
+    post {
+        failure {
+            githubNotify(
+                status: 'FAILURE',
+                description: "Build failed: ${env.BUILD_TAG}"
+            )
+        }
+    }
+}
+```
+
+### 11.2 Pipeline Triggers by Branch
+
+| Branch | Trigger | Deploy |
+|--------|---------|--------|
+| `feat/*` | push | Dev only |
+| `main` | push / PR merged | Dev + E2E |
+| `release/*` | tag | Dev + E2E + Prod (manual gate) |
+
+### 11.3 Polling Fallback
+
+If webhook isn't feasible (Jenkins behind NAT, no public IP), use polling:
+
+```groovy
+triggers {
+    pollSCM('H/5 * * * *')  // check every 5 minutes
+}
+```
+
+5-minute latency, no webhook setup needed. Webhook preferred where possible.
 - [Conversation Lifecycle](./2026-06-17-conversation-lifecycle.md) — Checkpoint rollback integration
 - [Jenkins Declarative Pipeline](https://www.jenkins.io/doc/book/pipeline/syntax/)
 - [Jenkins Kubernetes Plugin](https://plugins.jenkins.io/kubernetes/)
