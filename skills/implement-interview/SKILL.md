@@ -286,7 +286,31 @@ After the PRD is approved, generate a runnable Python project.
 
 6. **State Machine.** LangGraph `StateGraph` with nodes, edges, conditional routing. `AgentState` typed with TypedDict. Copy-on-Write + reducer merge semantics. Mermaid state diagram as comment at top of file.
 
-7. **Config YAML.** Domain model follows domain-model-design.yaml schema. Intents follow intent-classification-design.yaml §5. Workflow config references env-config.yaml schema.
+7. **Config YAML.** Domain model MUST follow OpenAPI 3.1 format per domain-model-design.md (AD 29):
+```yaml
+openapi: "3.1.0"
+info:
+  title: {product} Domain Model
+  version: "1.0.0"
+components:
+  schemas:
+    entity_name:
+      type: object
+      properties:
+        field_name:
+          type: string
+          description: "..."
+      required: [...]
+  x-states:
+    state_name:
+      description: "..."
+      entity: "#/components/schemas/{entity}"
+  x-transitions:
+    - from: state_a
+      to: state_b
+      guard: "condition"
+```
+NOT the old flat custom YAML format. States and transitions use `x-` extension prefix (valid OpenAPI 3.1).
 
 8. **Tests.** Mock LLM responses with `unittest.mock`. Test the happy path through the complete workflow. Assert correct state transitions and field population.
 
