@@ -15,6 +15,7 @@
 | 2026-06-17 | 0.3.0 | Replace Python code blocks with YAML schemas; add errorNode cross-reference in Sections 2.2 & 2.3; add LLM JSON guardrail note in Section 3.2; add agentState.phase to StateContext in Section 3.3 |
 | 2026-06-17 | 0.4.0 | Section 2.3: add explicit LLM +1 extra retry rule for extract/transform nodes; fix Chinese text on line 35; Section 4.2 Option B: replace Python expressions with declarative predicate descriptions |
 | 2026-06-18 | 0.6.0 | Add §2.6 Per-State Extraction Scope: parallel two-LLM extraction (LLM 1: current state scope; LLM 2: full OpenAPI schema), both on last 3+3 message window; merge + user confirmation for cross-state field recovery | |
+| 2026-06-25 | 0.6.1 | Fix §7.2: `check_rates` routes to ReadOnlyAgent (read-only query), not `collect_financial_profile_extract`. Align with Intent Classification §5.2 canonical routing. |
 
 ---
 
@@ -755,7 +756,7 @@ Layer 2: DECIDE
 
 ### 7.2 Intent → Extraction Routing
 
-1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `submit_lead` routes to `collect_lead_purpose_extract`; `check_rates` routes to `collect_financial_profile_extract`.
+1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `submit_lead` routes to `collect_lead_purpose_extract`; `check_rates` routes to `ReadOnlyAgent` (read-only RAG query, no extraction needed — see [Intent Classification §5.2](./2026-06-16-intent-classification-design.md) for the canonical routing).
 
 2. **Intent may skip extraction**: If the intent is `unrecognized_intent` or `ask_question`, extraction skips entirely and routes directly to a clarification or Q&A node.
 

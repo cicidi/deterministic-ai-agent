@@ -525,7 +525,7 @@ When the framework is used with Claude Desktop, MCP tools are auto-exposed:
 
 ### 7.4 Tool Failure Routing to `errorNode`
 
-When a tool invocation fails (timeout, permission denied, invalid response), the framework routes the execution to a configured `errorNode` instead of crashing the workflow. For the canonical errorNode strategy definitions, see [Routing & Execution §6.5](./2026-06-17-routing-execution-layer-design.md).
+When a tool invocation fails (timeout, permission denied, invalid response), the framework routes the execution to a configured `errorNode` instead of crashing the workflow. For the canonical errorNode strategy definitions, see [Routing & Execution §6.6](./2026-06-17-routing-execution-layer-design.md).
 
 ```yaml
 # framework.yaml

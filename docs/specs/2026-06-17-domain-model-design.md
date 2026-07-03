@@ -14,6 +14,7 @@
 | 2026-06-17 | 0.2.0 | Add implementation options (flat vs nested vs code-first); agentState.phase mapping; errorNode as standard transition target |
 | 2026-06-17 | 0.3.0 | Add Section 1.1: Implementation Approaches (Flat YAML vs Nested/Hierarchical vs Code-First) |
 | 2026-06-18 | 0.5.0 | Adopt OpenAPI 3.1 Schema as the data model definition standard; replace custom FieldDef format with JSON Schema; add HomeInsurance/UserInfo/Address/QuoteRequest/QuoteResponse examples; add downstream API schema patterns | |
+| 2026-06-25 | 0.5.1 | Fix §5.1: `check_rates` is a read-only query → ReadOnlyAgent (not `entry_state: submit_lead`). Add `agent: ReadOnlyAgent` field. Fix §5.3 multi-intent example: `check_rates` does not re-route to `submit_lead` state. Align with Intent Classification §5.2 canonical routing. |
 
 ---
 
@@ -468,7 +469,9 @@ intents:
     name: check_rates
     description: "User wants to check mortgage rates"
     confidence_threshold: 0.8
-    entry_state: submit_lead
+    # check_rates is a read-only query → ReadOnlyAgent (see Intent Classification §5.2)
+    # No entry_state needed — ReadOnlyAgent handles it without entering the submit_lead workflow
+    agent: ReadOnlyAgent
     examples:
       - "I want to see current mortgage rates"
       - "What's the best rate you can offer?"
@@ -515,8 +518,8 @@ The framework uses `entry_state` to set `agentState.phase` on first turn, then t
 A single conversation may match multiple intents over its lifetime:
 
 ```
-Turn 1: "I want a mortgage"       → intent: submit_mortgage_lead  → state: collect_lead_purpose
-Turn 2: "Also, I want to check rates"  → intent: check_rates      → state: submit_lead (re-routes)
+Turn 1: "I want a mortgage"       → intent: submit_lead           → state: collect_lead_purpose
+Turn 2: "Also, I want to check rates"  → intent: check_rates      → ReadOnlyAgent (parallel query, does not re-route the submit_lead workflow)
 ```
 
 When a new intent arrives mid-conversation, the framework evaluates whether to **re-route** (switch to new entry_state) or **continue** (stay in current state). The default behavior is to re-route unless the current state's transition rules explicitly prevent it.

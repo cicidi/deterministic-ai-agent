@@ -1,4 +1,4 @@
-# State Machine Layer Design — transitions + LangGraph Fusion
+# State Machine Layer Design — YAML + LangGraph Runtime
 
 > See also: [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) for overall architecture and non-FSM concerns.
 > All concrete workflow examples have been extracted to [examples/mortgage-lead/](../../examples/mortgage-lead/).
@@ -17,25 +17,49 @@
 | 2026-06-18 | 0.8.0 | Change default recommendation to Option C (Hybrid); add §1.2 registration & lookup mechanism; add §4.1 auto-generated Mermaid visualization + CI snapshot verification |
 | 2026-06-18 | 0.9.0 | Add §3.5 State Lifecycle Actions: declarative field mutations via on_entry/on_exit/on_take.set_field — all agentState writes visible in YAML; expand §3.3 field reference |
 | 2026-06-18 | 1.0.0 | Add §1.0 Semantic Model — SCXML: adopt W3C SCXML Recommendation as the state machine semantic standard; full SCXML ↔ YAML mapping table; YAML as canonical artifact, SCXML for compliance/audit reference |
+| 2026-06-25 | 1.1.0 | Revise §1.0: replace "W3C SCXML as semantic standard" with "UML statechart semantics" — SCXML's executable content was never adopted (`<script>`, `<foreach>` rejected); no SCXML file is produced or validated; no specific regulator requiring SCXML was named. SCXML↔YAML mapping table retained as informative reference. Title updated from "transitions + LangGraph Fusion" to "YAML + LangGraph Runtime" to reflect actual architecture. Aligns with AD #28 revision and VISION §6.8 LLM Positioning. |
 
 ---
 
 ## 1. Core Principle
 
-> **transitions defines WHAT (business correctness). LangGraph executes HOW (conversation infrastructure).**
+> **YAML defines WHAT (business correctness). LangGraph executes HOW (conversation infrastructure).**
 >
-> Developers maintain only the transitions definition. The LangGraph graph, LLM nodes, checkpointing, and interrupt are all auto-generated.
+> Developers maintain only the YAML workflow definition. The LangGraph StateGraph, LLM nodes, checkpointing, and interrupt are all auto-generated.
 
-### 1.0 Semantic Model — SCXML
+### 1.0 Semantic Model — UML Statechart
 
-The state machine semantic model follows the **W3C SCXML (State Chart XML) Recommendation** — the W3C standard for statechart-based control abstractions. SCXML defines the complete conceptual vocabulary: states, transitions, entry/exit actions, guards, data model, parallel regions, history, invoke, and send.
+The state machine follows **UML statechart semantics** — the conceptual vocabulary of states, transitions, guards, entry/exit actions, parallel regions, and history. This vocabulary is shared by every state machine library (XState, SCXML, `python-statemachine`, `transitions`) and predates any specific implementation.
 
-Our YAML workflow definition is **a YAML expression of SCXML semantics**, executed on LangGraph. No XML file is generated — the YAML is the canonical artifact. The semantic alignment serves two purposes:
+Our YAML workflow definition is the **canonical artifact**. LangGraph is the **runtime execution engine**. No external standard file (SCXML XML, XState JSON) is generated or consumed — the YAML is the single source of truth.
 
-1. **Compliance & Audit:** regulated industries generally can reference a W3C standard to justify state machine correctness
-2. **Conceptual completeness:** SCXML's semantic model is proven and comprehensive; we adopt it wholesale rather than inventing our own
+#### Why not SCXML as a "semantic standard"?
 
-**SCXML ↔ YAML Mapping:**
+The previous version of this spec (v1.0.0) adopted "W3C SCXML 1.0 Recommendation as the state machine semantic standard." This claim has been revised because:
+
+1. **SCXML's executable content was never adopted.** SCXML's `<script>`, `<foreach>`, and `<if>/<elseif>/<else>` — the parts that make it a *semantic* standard rather than just a notation — were explicitly rejected in the mapping table. Python guards and Python actions replace them. What remains is just the state/transition/guard vocabulary, which is UML statechart terminology, not SCXML-specific.
+
+2. **No SCXML file is produced or validated.** The spec admitted "No XML file is generated." A standard that is never produced, consumed, or validated against provides no compliance guarantee. An auditor asking "prove your state machine is correct" cannot be answered by pointing to a W3C spec that was never materialized.
+
+3. **No specific regulator requiring SCXML was named.** The rationale "regulated industries can reference a W3C standard" was an unfalsifiable assertion. If a specific regulator requires SCXML interchange, that requirement should be named explicitly and the SCXML export implemented.
+
+4. **2026 industry moved away from SCXML.** XState v5 (the de facto statechart standard in 2026) deliberately dropped SCXML conformance. Even the Rust `scxml` crate explicitly disclaims full W3C compliance: "The W3C spec includes ECMAScript evaluation... we want neither. SCXML is an interchange format here." No mainstream Python state machine library (`python-statemachine`, `transitions`) treats SCXML as its semantic standard.
+
+#### What we DO adopt
+
+| Concept | Source | Our YAML |
+|---------|--------|----------|
+| States, final states | UML statechart | `states:` collection |
+| Transitions with guards | UML statechart | `transitions:` with `guard:` and `to:` |
+| Entry/exit actions | UML statechart | `on_entry: set_field:` / `on_exit: set_field:` |
+| Parallel regions | UML statechart | parallel composite state + LangGraph `Send()` |
+| History states | UML statechart | deferred (Appendix C.1 Q3) |
+| Data model | UML statechart | entities + `agentState.collectedFields` |
+| Guards as named references | XState v5 / `python-statemachine` | `guard: "officer_eligible"` → `@register_guard` |
+
+#### SCXML ↔ YAML Mapping (Informative Reference)
+
+The following mapping is retained as an **informative reference** for teams that need to map to SCXML for interchange or have a specific regulatory requirement. It is NOT a compliance claim — SCXML is not the semantic standard.
 
 | SCXML concept | W3C reference | Our YAML |
 |---------------|---------------|----------|
@@ -49,15 +73,17 @@ Our YAML workflow definition is **a YAML expression of SCXML semantics**, execut
 | `<send event="" target="">` | §3.12 | framework internal (checkpoint events) |
 | `<invoke type="" src="">` | §3.9 | `executor: sub_workflow` |
 | `<parallel>` | §3.8 | parallel composite state + `Send()` |
-| `<history type="shallow\|deep">` | §3.7 | deferred (Appendix C.1 Q5) |
+| `<history type="shallow\|deep">` | §3.7 | deferred (Appendix C.1 Q3) |
 | `<final>` | §3.2.4 | implicit (no outgoing transitions) |
 | `<log label="" expr="">` | §4.5 | framework auto-checkpoint audit log |
 | `<script>` | §4.6 | not supported — complex logic via Python actions |
 | `<if>`, `<elseif>`, `<else>` | §4.7 | Python guards / YAML guard expressions |
 | `<foreach>` | §4.8 | not supported — iteration via Python actions |
 
-> **Implementation:** `SCXML 1.0` — W3C Recommendation 1 September 2015
-> **Reference:** https://www.w3.org/TR/scxml/
+> **Note:** `<script>`, `<foreach>`, and `<if>` are marked "not supported" because SCXML's executable content model (embedding an ECMAScript interpreter) conflicts with our Python-guards approach. This is the fundamental reason SCXML is not adopted as the semantic standard — its executable semantics are incompatible with our architecture.
+
+> **Reference (informative):** [W3C SCXML 1.0](https://www.w3.org/TR/scxml/) — for teams that need SCXML interchange. Not adopted as the semantic standard.
+> **Runtime:** [LangGraph 2.0](https://github.com/langchain-ai/langgraph) — 30k+ stars, 6M+ monthly downloads, production-validated (Klarna, Replit, Elastic).
 
 ---
 
@@ -294,7 +320,7 @@ Each state can carry 5 types of metadata, enforced at different points in the st
 
 > **Note on static verification:** The "static analysis" and "verification tool" referenced above refers to a planned YAML linter and test generator (design TBD) that reads preconditions, postconditions, and invariants to catch contract violations before deployment. This tooling is out of scope for the current design document; see Appendix C.7 for related open questions.
 >
-> **Note on errorNode:** errorNode provides unified error handling, defined in [Routing & Execution §6.5](./2026-06-17-routing-execution-layer-design.md).
+> **Note on errorNode:** errorNode provides unified error handling, defined in [Routing & Execution §6.8](./2026-06-17-routing-execution-layer-design.md).
 
 ### 3.2 Example Patterns
 
@@ -653,9 +679,11 @@ For concrete intent+state resolution examples within home insurance workflows, s
 
 ## References
 
-- [W3C SCXML 1.0 Recommendation](https://www.w3.org/TR/scxml/) — semantic standard
-- [transitions Library](https://github.com/pytransitions/transitions) — Python state machine concept reference
-- [LangGraph](https://github.com/langchain-ai/langgraph) — runtime execution engine
+- [UML Statechart Formalism](https://statecharts.dev/) — conceptual vocabulary (states, transitions, guards, entry/exit actions, parallel regions, history) adopted by this spec
+- [LangGraph 2.0](https://github.com/langchain-ai/langgraph) — runtime execution engine (30k+ stars, 6M+ monthly downloads, production-validated)
+- [python-statemachine](https://github.com/fgmacedo/python-statemachine) — alternative Python statechart library (informative; not used as runtime)
+- [W3C SCXML 1.0](https://www.w3.org/TR/scxml/) — informative reference for SCXML interchange mapping (see §1.0); not adopted as semantic standard
+- [XState v5](https://stately.ai/docs/xstate) — TypeScript statechart standard (informative; confirms industry moved from SCXML to JSON-based statecharts)
 - [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
 - [Domain Model](./2026-06-17-domain-model-design.md)
 - [Routing & Execution](./2026-06-17-routing-execution-layer-design.md)

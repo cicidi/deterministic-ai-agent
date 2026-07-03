@@ -14,6 +14,7 @@
 | 2026-06-18 | 0.2.0 | Add §4 Progressive Model Escalation: small→medium→large model fallback chain after 2+ failures; 3 implementation options (Fixed Tiers, Provider-Cascade, Dynamic Routing); tier-aware retry budget; per-environment defaults |
 | 2026-06-18 | 0.3.0 | Bugfixes: corrected §4.4 formula (removed erroneous +1, Σ only), fixed §4.5 audit trail (total_attempts 3→4), fixed §4.1 deepseek redundant tier. Optimizations: §4.2 deterministic fallback before escalation (keyword/regex salvage), §3.5 confidence threshold gate (x-threshold), §3.2 type coercion audit table with lossy/lossless classification, §3.3 structured error injection format, §4.9 sticky tier (escalation memory with TTL) |
 | 2026-06-18 | 0.3.1 | Adversarial multi-agent review (ai-coworker-contrarian-review): fixed §3.3 retry budget formula mismatch with §4.4, fixed §4.2 escalation flow (Tier 1 now shows 2 failures per default config), fixed §8 total_attempts 6→5, added `coercions` field to LLMResult struct, added boolean string coercion rows, renamed duplicate "Implementation Options" headings (§4.6→Model Escalation Strategies, §5→Gateway Validation Strategies), added §3.6 Layer 3 Free-Text Handling with minimal schema guidance, replaced `x-threshold` custom keyword with standard `minimum` per JSON Schema spec, added deterministic fallback quality gates (post-fallback validation, min_field_confidence, node-type restriction to extraction), added circuit breaker for total provider outage, added max_tokens guard, clarified sticky tier TTL behavior, documented LLM +1 last-tier trade-off with `llm_extra_retry` config, added per-error-type retry policy, standardized model names with version suffixes |
+| 2026-06-25 | 0.4.0 | Split §4.2 escalation into two independent layers: Reliability Layer (provider failover, same-tier different-provider) and Quality Layer (model escalation, same-provider more-capable model). Per §6.8 LLM Positioning and 2026 industry guidance — conflating reliability failover with cost-quality routing is "the most common architectural mistake." Added §4.2a Two-Layer Architecture, §4.2b Reliability Layer, §4.2c Quality Layer. Removed duplicate §4.7/§4.8 (orphaned comparison-matrix fragment + duplicate Environment-Specific Defaults). Added escalation_rate SLO alert. |
 
 ---
 
@@ -428,31 +429,126 @@ If either is exceeded, the call is rejected with HTTP 500. The gateway records `
 
 When `on_budget_exceeded: warn_only`, the gateway logs a warning but still allows the call (useful for dev/testing).
 
-### 4.2 Escalation Flow
+### 4.2 Two-Layer Escalation Architecture
+
+> **Design decision (AD #31, revised 2026-06-25):** The gateway uses **two independent escalation layers** — Reliability and Quality — not a single chained cascade. This separation follows 2026 industry guidance: *"Conflating reliability failover with cost-quality routing is the most common architectural mistake teams make."* (jatinbansal.com, truefoundry.com, genaipatterns.dev). The two layers have different goals, different triggers, different escalation targets, and produce distinct audit events.
+
+#### 4.2a Two-Layer Architecture
+
+```
+                    LLM call fails
+                         │
+                   Failure type?
+                   ╱            ╲
+     provider_error            schema_violation / low_confidence
+          │                              │
+   ┌──────▼──────┐              ┌────────▼────────┐
+   │ Reliability │              │   Quality Layer  │
+   │    Layer    │              │                  │
+   │ (failover)  │              │ (escalation)     │
+   └──────┬──────┘              └────────┬────────┘
+          │                              │
+   Goal: get ANY          Goal: get a MORE CAPABLE
+   healthy model           model that can do the task
+          │                              │
+   Action: switch to       Action: retry same model,
+   same-tier model on      then escalate to more
+   DIFFERENT provider      capable model SAME provider
+          │                              │
+   Audit: failover_reason  Audit: escalation_reason
+   = provider_unhealthy    = quality_rejection
+```
+
+| Dimension | Reliability Layer | Quality Layer |
+|-----------|-------------------|---------------|
+| **Goal** | Availability — get a working model | Quality — get a model that can do the task |
+| **Trigger** | `provider_error` (timeout, 5xx, rate limit, auth failure) | `schema_violation`, `low_confidence` (JSON parse fail, missing fields, type mismatch) |
+| **Escalation target** | Same-tier model on a **different provider** | More-capable model on the **same provider** |
+| **Speed** | Fast — no retry on failed provider, immediate failover | Slow — retry same model first (failures_before_escalation), then escalate |
+| **Cost impact** | Neutral — same price tier | Higher — moves to more expensive model |
+| **Audit event** | `failover_reason: provider_unhealthy` | `escalation_reason: quality_rejection` |
+| **Retry before escalate?** | No — don't retry a dead provider | Yes — `failures_before_escalation` (default: 2) |
+| **Sticky tier?** | No — next call retries original provider | Yes — remember which tier works (§4.8) |
+
+#### 4.2b Reliability Layer (Provider Failover)
+
+When a provider is unhealthy (timeout, 5xx, rate limit), the gateway **immediately fails over** to a same-tier model on a different provider. No retry on the failed provider — retrying a dead provider wastes time and money.
+
+```
+gpt-4o-mini (openai) → TIMEOUT
+  → immediate failover to claude-haiku-3-5 (anthropic)  ← same tier, different provider
+  → SUCCESS ✅
+  
+Audit: failover_reason: provider_unhealthy
+       failed_provider: openai
+       failover_provider: anthropic
+```
+
+If the failover provider is also unhealthy, continue to the next provider at the same tier. If all providers at the current tier are unhealthy, escalate to the quality layer (try a more capable model — it may work even if the cheap tier is overloaded).
+
+```yaml
+llm:
+  reliability_layer:
+    enabled: true
+    trigger_on: [timeout, http_5xx, rate_limit, auth_failure]
+    strategy: failover_same_tier_different_provider
+    retry_on_failed_provider: false          # don't retry dead providers
+    circuit_breaker:
+      enabled: true
+      threshold: 5                           # failures/minute
+      cooldown_seconds: 60
+      on_all_providers_down: errornode       # route to errorNode if every provider is in cooldown
+```
+
+**Circuit breaker:** If ALL providers are in cooldown (total outage), the gateway enters circuit-open state for `circuit_breaker_ttl_seconds` (default: 30). During this window, all LLM calls immediately route to `errorNode` with `escalate_to_human` strategy.
+
+#### 4.2c Quality Layer (Model Escalation)
+
+When a model produces a quality failure (schema violation, low confidence), the gateway **retries the same model** up to `failures_before_escalation` times, then **escalates to a more capable model on the same provider**. The goal is better capability, not different availability.
+
+```
+gpt-4o-mini (openai) → schema_violation (missing 'loan_amount')
+  → retry gpt-4o-mini → schema_violation (type mismatch)
+  → deterministic fallback → FAIL
+  → escalate to gpt-4o (openai)               ← same provider, more capable model
+  → SUCCESS ✅
+
+Audit: escalation_reason: quality_rejection
+       failed_model: gpt-4o-mini
+       escalation_model: gpt-4o
+       failed_attempts: 2
+```
+
+If all models within a provider are exhausted on quality failures, escalate to the next provider's model chain (starting from that provider's cheapest model — the quality issue may be provider-specific, not model-specific).
 
 ```
 openai (priority=1):
-  Attempt 1 ──→ gpt-4o-mini (priority=1) ──→ FAIL (schema violation)
-  Attempt 2 ──→ gpt-4o-mini (priority=1) ──→ FAIL (provider timeout)
-         │
-         ├──→ Step: deterministic fallback (keyword/regex extraction)
-         │         │
-         │         ├── fallback produces candidate data → validate → FAIL
-         │         └──→ escalate to next model
-         │
-  Attempt 3 ──→ gpt-4o (priority=2) ──→ FAIL (schema violation)
-  Attempt 4 ──→ gpt-4o (priority=2) ──→ FAIL (type mismatch)
-         │
-         ├──→ deterministic fallback → FAIL
-         └──→ all openai models exhausted → escalate to next provider
-
+  gpt-4o-mini → FAIL (quality) × 2
+  gpt-4o      → FAIL (quality) × 2
+  → all openai models exhausted on quality
+  
 anthropic (priority=2):
-  Attempt 5 ──→ claude-haiku-3-5 (priority=1) ──→ SUCCESS ✅
+  claude-haiku-3-5 → SUCCESS ✅              ← fresh provider, fresh attempt
 ```
 
-At each model, the gateway retries up to `failures_before_escalation` times (default: 2). After 2 failures, deterministic fallback runs. If fallback also fails, escalate to the next model within the same provider. When all models in a provider are exhausted, escalate to the next provider by priority. When all providers exhausted → `errorNode`.
+**Deterministic fallback** runs once per model (after LLM retries exhausted, before escalating to next model) and can be disabled per-node. Fallback applies to extraction nodes (keyword/regex) and decision nodes (enum-value substring matching); for response nodes it is typically disabled.
 
-**Circuit breaker:** If ALL models across ALL providers are exhausted via `provider_error` (timeout, 5xx) — indicating a total provider outage — the gateway enters circuit-open state for `circuit_breaker_ttl_seconds` (default: 30). During this window, all LLM calls immediately route to `errorNode` with `escalate_to_human` strategy.
+```yaml
+llm:
+  quality_layer:
+    enabled: true
+    trigger_on: [schema_violation, low_confidence]
+    failures_before_escalation: 2             # retry same model twice before escalating
+    escalate_within_provider: true            # try more capable model on same provider first
+    escalate_cross_provider: true             # if provider exhausted, try next provider
+    deterministic_fallback_before_escalation: true
+    deterministic_fallback_timeout_ms: 100
+    deterministic_fallback_acceptance: require_all_fields
+    deterministic_fallback_quality:
+      min_field_confidence: 0.5
+      post_fallback_validate: true
+      applicable_node_types: [extraction]
+```
 
 **Prompt strategy on escalation:**
 
@@ -469,20 +565,6 @@ llm:
     max_prompt_length: 8192
 ```
 
-Deterministic fallback runs once per model (after LLM retries exhausted) and can be disabled per-node. Fallback applies to extraction nodes (keyword/regex) and decision nodes (enum-value substring matching); for response nodes it is typically disabled.
-
-```yaml
-llm:
-  model_escalation:
-    deterministic_fallback_before_escalation: true
-    deterministic_fallback_timeout_ms: 100
-    deterministic_fallback_acceptance: require_all_fields
-    deterministic_fallback_quality:
-      min_field_confidence: 0.5
-      post_fallback_validate: true
-      applicable_node_types: [extraction]
-```
-
 **Fallback constraints:**
 - Fallback ONLY applies to extraction nodes (L1). Decision nodes and response nodes skip fallback.
 - Fallback output MUST pass the same `output_schema` JSON validation as LLM output.
@@ -493,23 +575,38 @@ llm:
 
 ### 4.3 Escalation Triggers
 
-Escalation counts **all failure types** by default. Which failures trigger escalation is configurable:
+Each layer has its own trigger configuration. The two layers MUST be configured independently — this is the core of the two-layer separation.
 
-| Trigger | Default | Description |
-|---------|---------|-------------|
-| `provider_error` | enabled | Timeout, 5xx, rate limit, auth failure |
-| `schema_violation` | enabled | JSON parse failure, missing fields, type mismatch |
-| `content_quality` | disabled | Empty response, too-short output, off-topic (optional) |
+| Trigger | Layer | Default | Description |
+|---------|-------|---------|-------------|
+| `timeout` | Reliability | enabled | Request timeout |
+| `http_5xx` | Reliability | enabled | Provider server error |
+| `rate_limit` | Reliability | enabled | Provider rate limit hit |
+| `auth_failure` | Reliability | enabled | API key invalid/expired |
+| `schema_violation` | Quality | enabled | JSON parse failure, missing fields, type mismatch |
+| `low_confidence` | Quality | enabled | LLM confidence below threshold (§3.5) |
+| `content_quality` | Quality | disabled | Empty response, too-short output, off-topic (optional) |
 
 ```yaml
 llm:
-  model_escalation:
+  reliability_layer:
     enabled: true
-    failures_before_escalation: 2        # escalate after 2 failures on current model
     trigger_on:
-      - provider_error
+      - timeout
+      - http_5xx
+      - rate_limit
+      - auth_failure
+
+  quality_layer:
+    enabled: true
+    trigger_on:
       - schema_violation
+      - low_confidence
+    # content_quality is opt-in (disabled by default)
+    failures_before_escalation: 2        # retry same model twice before escalating
 ```
+
+> **Why separate?** A `timeout` on gpt-4o-mini should failover to claude-haiku (same tier, different provider) — not escalate to gpt-4o (more expensive, same provider that may also be timing out). A `schema_violation` on gpt-4o-mini should escalate to gpt-4o (more capable, same provider) — not failover to claude-haiku (same tier, may have the same quality issue). Mixing the two produces both unnecessary cost and unnecessary failures.
 
 ### 4.4 Priority-Aware Retry Budget
 
@@ -539,13 +636,14 @@ providers:
 
 ### 4.5 Audit Trail
 
-Each escalation is recorded in the audit log. Example (Tier 0 exhausted, Tier 1 succeeds on second attempt — only one escalation):
+Each escalation is recorded in the audit log with its layer (reliability vs quality). Example (quality escalation: Tier 0 exhausted on schema violations, Tier 1 succeeds):
 
 ```json
 {
   "llm_call_id": "call_abc123",
   "escalations": [
     {
+      "layer": "quality",
       "from_tier": { "provider": "openai", "model": "gpt-4o-mini" },
       "to_tier":   { "provider": "openai", "model": "gpt-4o" },
       "reason": "schema_violation",
@@ -556,6 +654,7 @@ Each escalation is recorded in the audit log. Example (Tier 0 exhausted, Tier 1 
       ]
     }
   ],
+  "failovers": [],
   "final_tier_used": { "provider": "openai", "model": "gpt-4o" },
   "total_attempts": 4,
   "cost": {
@@ -568,33 +667,72 @@ Each escalation is recorded in the audit log. Example (Tier 0 exhausted, Tier 1 
 }
 ```
 
-The errorNode audit (§8) extends this structure. This section covers escalation-specific fields; §8 adds error classification, coercion details, and raw response capture.
+Example (reliability failover: provider timeout, immediate failover to different provider):
+
+```json
+{
+  "llm_call_id": "call_def789",
+  "escalations": [],
+  "failovers": [
+    {
+      "layer": "reliability",
+      "from_provider": "openai",
+      "to_provider": "anthropic",
+      "from_model": "gpt-4o-mini",
+      "to_model": "claude-haiku-3-5",
+      "reason": "provider_unhealthy",
+      "error": "timeout after 30000ms"
+    }
+  ],
+  "final_tier_used": { "provider": "anthropic", "model": "claude-haiku-3-5" },
+  "total_attempts": 2,
+  "cost": {
+    "tier_0_tokens": { "prompt": 1200, "completion": 0 },
+    "tier_0_attempts": 1,
+    "tier_1_tokens": { "prompt": 1200, "completion": 200 },
+    "tier_1_attempts": 1,
+    "total_tokens": { "prompt": 2400, "completion": 200 }
+  }
+}
+```
+
+The errorNode audit (§8) extends this structure. This section covers escalation/failover-specific fields; §8 adds error classification, coercion details, and raw response capture.
 
 ### 4.6 Environment-Specific Defaults
 
-| Environment | Escalation Enabled | Default Providers |
-|-------------|-------------------|-------------------|
-| dev | false (single provider, fail fast) | openai: gpt-4o-mini only |
-| e2e | true (test escalation behavior) | openai [gpt-4o-mini, gpt-4o] + anthropic [claude-haiku-3-5] |
-| prod | true | openai [gpt-4o-mini, gpt-4o] + anthropic [claude-haiku-3-5, claude-sonnet-4-20250514] |
+| Environment | Reliability Layer | Quality Layer | Default Providers |
+|-------------|-------------------|---------------|-------------------|
+| dev | disabled (fail fast) | disabled (single model, fail fast) | openai: gpt-4o-mini only |
+| e2e | enabled (test failover) | enabled (test escalation) | openai [gpt-4o-mini, gpt-4o] + anthropic [claude-haiku-3-5] |
+| prod | enabled | enabled | openai [gpt-4o-mini, gpt-4o] + anthropic [claude-haiku-3-5, claude-sonnet-4-20250514] |
 
-### 4.7 Sticky Model (Escalation Memory)
-| Provider redundancy | None | Full (multi-provider) |
-| Cost predictability | High | Medium |
-| Latency overhead | None | None |
-| Audit simplicity | High | Medium |
-| SLA resilience | Medium (single provider) | High |
-| Implementation effort | Low | Medium |
+### 4.7 Escalation Rate SLO
 
-### 4.8 Environment-Specific Defaults
+> **New in v0.4.0.** Industry guidance: "alert on escalation rate, not just errors — the failure here is silent and shows up only on the invoice."
 
-| Environment | Escalation Enabled | Default Tier Chain |
-|-------------|-------------------|-------------------|
-| dev | false (use single cheap model, fail fast) | gpt-4o-mini only |
-| e2e | true (test escalation behavior) | gpt-4o-mini → gpt-4o |
-| prod | true | gpt-4o-mini → gpt-4o → gpt-4.1 |
+The gateway tracks the **escalation rate** (percentage of calls that escalate to a higher tier) as a key SLO metric. A high escalation rate means the cheap model is consistently insufficient — either the prompts need improvement or the default model needs to be upgraded.
 
-### 4.9 Sticky Tier (Escalation Memory)
+```yaml
+llm:
+  escalation_rate_slo:
+    enabled: true
+    target: 0.10                          # <10% of calls should escalate
+    alert_threshold: 0.30                 # alert if >30% escalate
+    measurement_window_minutes: 15        # rolling 15-min window
+    on_alert: warn                        # warn | page | auto_upgrade_default
+    # auto_upgrade_default: if escalation rate persistently >alert_threshold for
+    # 3 consecutive windows, automatically set the node's default model to the
+    # most frequently escalated-to model (cost optimization: stop paying for
+    # failed cheap-model attempts)
+```
+
+| Metric | Description | Alert |
+|--------|-------------|-------|
+| `escalation_rate` | % of calls escalating to higher tier (quality layer) | >30% in 15 min |
+| `failover_rate` | % of calls failing over to different provider (reliability layer) | >20% in 15 min |
+| `cost_per_successful_call` | Average cost per call that succeeded | Trending >20% above baseline |
+
+### 4.8 Sticky Tier (Escalation Memory)
 
 By default, each LLM call starts fresh from Tier 0. This can lead to **repeated escalation cost**: if a node consistently fails on the small model, every call wastes 2 attempts on Tier 0 before reaching the capable Tier 1.
 
@@ -633,7 +771,7 @@ When the TTL expires, the next call starts from Tier 0 again — allowing the fr
 }
 ```
 
-### 4.10 Pre-Call Checks
+### 4.9 Pre-Call Checks
 
 Before issuing any LLM call, the gateway runs pre-call checks to avoid calls that are guaranteed to fail. This reduces unnecessary retries and escalation.
 
@@ -918,7 +1056,7 @@ response_nodes:
 
 ## 8. Integration with errorNode
 
-When the gateway exhausts all tiers and retry attempts and still has an invalid response, it routes to `errorNode`. For the canonical errorNode strategies, see [Routing & Execution §6.5](./2026-06-17-routing-execution-layer-design.md).
+When the gateway exhausts all tiers and retry attempts and still has an invalid response, it routes to `errorNode`. For the canonical errorNode strategies, see [Routing & Execution §6.6](./2026-06-17-routing-execution-layer-design.md).
 
 ```
 LLM Client Gateway (all tiers exhausted)

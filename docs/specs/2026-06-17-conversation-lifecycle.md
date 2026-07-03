@@ -10,6 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial conversation lifecycle spec: states, trace_id = user_id, checkpoints, timeout, resume, audit, multi-device |
+| 2026-06-25 | 0.1.1 | Fix §4.4: update parallel-node checkpoint semantics — audit fields (messages, audit_log) are append-only; business fields (collectedFields, response, goal_check_result) are resolved by configurable state_reducers. Align with Routing & Execution §1.2–§1.3 revision. |
 
 ---
 
@@ -305,7 +306,7 @@ checkpoint:
 
 ### 4.4 Parallel Node Checkpoints
 
-When parallel nodes complete concurrently (e.g., goalChecker + generateResponse), both produce state updates that merge into the checkpoint. Since all state fields use append-only semantics (see [Routing & Execution §1.2](./2026-06-17-routing-execution-layer-design.md)), there is no race condition: both updates are accumulated, never overwritten. LangGraph's built-in checkpoint reducer handles the merge atomically — the framework does not need explicit locking.
+When parallel nodes complete concurrently (e.g., goalChecker + generateResponse), both produce state updates that merge into the checkpoint. **Audit fields** (`messages`, `audit_log`, `llm_calls`) use append-only semantics — all updates are accumulated, never overwritten. **Business fields** (`collectedFields`, `response`, `goal_check_result`, `entities`, `phase_stack`) are resolved by the `state_reducers` declared in the workflow YAML. See [Routing & Execution §1.2–§1.3](./2026-06-17-routing-execution-layer-design.md) for the concurrency model and reducer strategies. LangGraph's built-in checkpoint reducer handles the merge atomically — the framework does not need explicit locking.
 
 If both nodes write to the same dict key (e.g., both append to `collectedFields`), the append ensures both values are preserved. If a conflict is detected (two nodes write conflicting values for the same non-list field), the value is wrapped as `[old, new]` for downstream resolution.
 

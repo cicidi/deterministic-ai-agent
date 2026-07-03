@@ -78,6 +78,7 @@ Every spec document MUST:
 
 - ❌ **Don't duplicate.** If a concept is defined in one spec, reference it; don't redefine.
 - ❌ **Don't over-specify implementation.** "LLM calls OpenAI" is too specific. "LLM provider (configurable)" is correct.
+- ❌ **Don't reinvent the wheel.** Before defining a custom interface, check whether mature OSS already solves the problem. Reference the OSS as a recommended implementation option; don't rebuild what the ecosystem provides. See §6.7.
 - ❌ **Don't lose the skill vision.** Every spec should be usable as an interview template by a downstream AI.
 
 ---
@@ -100,7 +101,7 @@ Every spec document MUST:
 | 12 | 2026-06-17 | Two-level permission model | Config-level (YAML allowlists) + OAuth/role-based (runtime) |
 | 13 | 2026-06-17 | Phase-aware routing with return stack | agentState.phase + intent → next node; question → return to previous phase |
 | 14 | 2026-06-17 | Goal-driven workflow | Async goal set at start; parallel goal check at end; 422 on large gap |
-| 15 | 2026-06-17 | All errors → errorNode unified | No per-category routing; errorNode handles everything |
+| 15 | 2026-06-17 (revised 2026-06-25) | All errors → errorNode unified + 3-type classification + 8 strategies | **Original:** All errors → errorNode unified; errorNode strategies: ask_clarify, escalate_to_human, terminate, fallback_value, retry_with_context. **Revised:** Added error classification layer (transient/permanent/partial) required before strategy selection. Expanded strategies from 5 to 8: added `retry_with_backoff`, `graceful_degradation`, `dead_letter_queue`. Added structured FrameworkError schema with root_cause chain for cross-agent tracing. Added strategy decision matrix (error type → valid strategies). See routing-execution §6.3–§6.10. |
 | 16 | 2026-06-17 | LLM +1 extra retry | Compensates for LLM non-determinism |
 | 17 | 2026-06-17 | Serial + parallel + mixed sub-workflow nodes | LangGraph Send API + conditional edges |
 | 18 | 2026-06-17 | Two response modes | Pure message (LLM + prompt eval) + Widget (deterministic logic) |
@@ -113,12 +114,14 @@ Every spec document MUST:
 | 25 | 2026-06-18 | Spec deduplication & version alignment | Guard expression syntax delegated to state-machine §3.4 (domain-model now cross-references); HLD ToolMeta.type enum synced with child specs; remaining Groovy code removed from CI/CD spec; PII tool catalog entries trimmed to cross-reference response-generation §8 |
 | 26 | 2026-06-18 | Option C (Hybrid) as default + auto-generated Mermaid graph | YAML as single source of truth for workflow definition; Python functions (guards, validators, actions) registered by name and referenced from YAML; framework startup validates all name bindings resolve (drift detection); LangGraph's draw_mermaid_png() auto-generates visual graph snapshot; CI enforces YAML ↔ PNG consistency; non-technical reviewers use PNG for visual audit |
 | 27 | 2026-06-18 | Declarative field mutations (on_entry/on_exit/on_take.set_field) | Every agentState field write is declared in YAML via lifecycle hooks — no hidden code mutations. set_field supports literals, function calls (now(), uuid4()), and field references. Execution order: on_exit → guard eval → on_take → checkpoint → on_entry → main executor. Simple assignments stay in YAML; complex computation stays in Python action functions via output_schema merger. |
-| 28 | 2026-06-18 | SCXML as semantic standard | W3C SCXML Recommendation adopted as the state machine semantic model. YAML workflow definition is a YAML expression of SCXML semantics; no XML file is generated. Full SCXML ↔ YAML mapping documented in state-machine §1.0. SCXML provides compliance/audit reference for regulated industries; LangGraph is the runtime; YAML is the canonical artifact. |
+| 28 | 2026-06-18 (revised 2026-06-25) | UML Statechart Semantics (revised from SCXML) | **Original:** SCXML as semantic standard. **Revised:** The state machine follows UML statechart semantics (states, transitions, guards, entry/exit actions, parallel regions) — the conceptual vocabulary shared by XState, SCXML, `python-statemachine`, and `transitions`. YAML is the canonical artifact; LangGraph is the runtime. SCXML is NOT adopted because: (1) its executable content (`<script>`, `<foreach>`) was never used — Python guards replace it; (2) no SCXML file is produced or validated; (3) no specific regulator requiring SCXML was named; (4) 2026 industry (XState v5, Rust scxml crate) moved away from SCXML. The SCXML↔YAML mapping table is retained as an informative reference for teams needing SCXML interchange. |
 | 29 | 2026-06-18 | OpenAPI 3.1 Schema as data model standard | Domain model entities defined using OpenAPI Schema Objects (JSON Schema) instead of custom FieldDef format. $ref enables schema composition (HomeInsurance aggregates UserInfo, Address, PropertyInfo, CoverageInfo). Industry-standard tooling: validators, code generators, Swagger UI. Downstream API contracts (QuoteRequest, QuoteResponse) defined in same format. x-state-bindings maps states to entity fields for per-state extraction scope. |
 | 30 | 2026-06-18 | Multi-pass per-state extraction scope | Extract node uses per-state scope (from domain model x-state-bindings) instead of full domain schema. Pass 1: two parallel LLMs (narrow scope + broad scope). Pass 2: merge, cross-validate, and user confirmation (never silently merge guessed data). Scope never includes future states' fields. |
-| 31 | 2026-06-18 | Progressive model escalation on LLM failure | Minimum 2 providers, each with ≥2 models. Escalation order: within-provider model priority (cheap → expensive) → cross-provider provider priority. Escalation is a safety net, not a feature — the default is always the cheapest model. |
+| 31 | 2026-06-18 (revised 2026-06-25) | Two-Layer Escalation: Reliability + Quality | **Original:** Progressive model escalation on LLM failure — single cascade chain. **Revised:** Two independent layers: (1) Reliability Layer — provider failover (timeout/5xx/rate-limit → same-tier model on different provider, no retry on dead provider); (2) Quality Layer — model escalation (schema-violation/low-confidence → retry same model, then escalate to more capable model same provider). Rationale: conflating reliability failover with cost-quality routing is "the most common architectural mistake" (2026 industry guidance, 4 independent sources). Two layers have different goals (availability vs quality), different triggers, different escalation targets, and produce distinct audit events. Minimum 2 providers, each with ≥2 models. The default is always the cheapest model. |
 | 32 | 2026-06-18 | Cheap model by default | The framework is designed to work with inexpensive small models (gpt-4o-mini, claude-haiku, deepseek-chat) as the primary engine. Larger models exist only as escalation fallback. Every design decision — extraction scoping, parallel LLM merge, tier-aware retry, sticky tier — is optimized for extracting maximum accuracy from the cheapest model tier. |
 | 33 | 2026-06-18 | Daily token budget + cost calculator | The gateway enforces a daily token limit and cost cap per server. Each model declares price per 1K tokens (input/output). Cumulative daily usage is tracked. Exceeding budget → HTTP 500, service stop. `on_budget_exceeded: warn_only` option for dev/testing bypass. |
+| 34 | 2026-06-25 | LLM-as-Component, Not LLM-as-Orchestrator | The framework uses a deterministic state machine as the orchestrator; the LLM is a component that does NLU (intent classification + entity extraction) and response generation only. Internal tools are NOT exposed to external LLM clients via MCP — only coarse-grained `send_message` is exposed. This enables: cheap models as default (AD #32), deterministic/auditable execution (AD #3), per-node permission enforcement (AD #12), and model replaceability. See §6.8 for full rationale. |
+| 35 | 2026-06-25 | MCP protocol upgraded to 2025-11-25 (Streamable HTTP) | MCP transport upgraded from deprecated HTTP+SSE (2024-11-05) to Streamable HTTP (2025-11-25 stable). Protocol version pinned explicitly. The framework exposes coarse-grained conversation-level tools (`send_message`), NOT fine-grained internal tools — see MCP API Protocol §1.3 for the exposure granularity design decision. |
 
 ---
 
@@ -162,10 +165,12 @@ Every spec document MUST:
 
 ### 6.5 Error Handling
 
-- **All errors → errorNode** — unified handling, no per-category dispatch
+- **All errors → errorNode** — unified handling; no per-category *routing* (classification happens, routing is always to errorNode)
+- **Error classification required** — before strategy selection, errors are classified as transient / permanent / partial (see AD #15 revision, routing-execution §6.3)
 - **LLM +1 extra retry** — then errorNode on exhaustion
 - **All timeouts → errorNode** after retry exhaustion
-- **errorNode strategies** — ask_clarify, escalate_to_human, terminate, fallback_value, retry_with_context
+- **8 recovery strategies** — `retry_with_backoff`, `retry_with_context`, `ask_clarify`, `fallback_value`, `graceful_degradation`, `dead_letter_queue`, `escalate_to_human`, `terminate` (see routing-execution §6.6 for canonical definitions)
+- **Structured error schema** — FrameworkError with root_cause chain for cross-agent tracing (see routing-execution §6.5)
 
 ### 6.6 Environment Awareness
 
@@ -174,6 +179,71 @@ Every spec document MUST:
 - **e2e**: prod model, mock APIs, same thresholds as prod
 - **prod**: full guardrails, real APIs, hard protection
 
+### 6.7 OSS-First Implementation
+
+The framework defines **interfaces**, not implementations. For every interface, specs MUST:
+
+1. **Survey existing OSS first.** Before designing a custom mechanism, check whether a mature, widely-adopted library already solves the problem (e.g., Instructor for structured LLM output, Temporal for durable execution, Presidio for PII detection, official A2A SDKs for agent-to-agent communication).
+2. **Reference OSS as implementation options.** Each interface spec MUST list at least one mature OSS library as a recommended production implementation, alongside any custom/framework-native option. The OSS option is the **default recommendation** unless there is a documented reason it is insufficient.
+3. **Give multiple options with honest trade-offs.** Per §7, every interface has ≥2 options with a comparison matrix. When an OSS option exists, it MUST appear in the matrix — not only framework-native options.
+4. **Framework value-add stays above the OSS layer.** The framework's job is the *policy* layer (budget enforcement, escalation, audit trail, permission gates, retry budgets), not the *mechanism* layer (JSON validation, provider routing, state graph execution). Wrap the OSS; don't replace it.
+5. **Document the boundary.** Each spec that references an OSS library MUST state clearly: what the OSS does vs. what the framework adds on top.
+
+**Anti-pattern:** Building a custom structured-output validation pipeline (retry-on-violation, type coercion, multi-provider support) when Instructor (3M+ monthly downloads, 15+ providers, 108 releases) already does this — and only listing it as a fourth option. The framework should wrap Instructor and add budget/escalation/audit, not reimplement its core.
+
+### 6.8 LLM Positioning: Component, Not Orchestrator
+
+#### The Two Architectural Camps
+
+There are two fundamentally different ways to build AI agents in 2026:
+
+| | Camp A: LLM-as-Orchestrator | Camp B: LLM-as-Component (This Framework) |
+|---|---|---|
+| **Who decides tool call order** | The LLM | A deterministic state machine |
+| **What the LLM sees** | All available tools (via `tools/list`) | Only the current node's context |
+| **What the LLM does** | Understands + decides + orchestrates + generates | Understands (NLU) + generates (response) |
+| **Workflow logic lives in** | LLM prompts + tool descriptions | YAML state machine + Python executors |
+| **Model requirements** | Needs the strongest, most expensive model to reason well | Works with the cheapest model (gpt-4o-mini, claude-haiku, deepseek-chat) |
+| **Determinism** | Non-reproducible — same input may produce different tool sequences | Reproducible — same input + same state = same execution path |
+| **Auditability** | "The LLM decided to call X" — hard to prove correctness | "The state machine routed to X because guard Y passed" — provable |
+| **Cost per turn** | High (large context with all tool schemas + reasoning) | Low (narrow context, no tool listing, no reasoning about what to call) |
+| **Latency** | Higher (LLM must reason about tool selection before acting) | Lower (state machine routes in <1ms; LLM only does NLU + generation) |
+| **Best for** | Open-ended tasks (coding, research, creative work) | Regulated workflows (lending, insurance, healthcare, legal, government) |
+
+#### Why This Framework Chooses Camp B
+
+**1. Regulated industries require deterministic, auditable execution.**
+
+A loan approval workflow has a legal sequence: KYC → credit check → eligibility → rate calculation → offer → acceptance. An LLM skipping KYC because "the user seems trustworthy" is a compliance violation. The state machine enforces the sequence; the LLM cannot override it.
+
+**2. Simple models are sufficient — and sufficient is better.**
+
+When the LLM only does NLU (intent classification + entity extraction) and response generation, a cheap model (gpt-4o-mini at $0.15/1M tokens) performs as well as gpt-4o at $2.50/1M tokens. The deterministic core handles all decision logic that would otherwise require expensive model reasoning. This delivers:
+
+- **Higher accuracy** — the state machine never hallucinates a wrong tool call; the LLM's only job (understanding user input) is what small models do best
+- **Lower cost** — 10-20x cheaper per turn vs. LLM-as-orchestrator with frontier models
+- **Lower latency** — no LLM reasoning about "which tool should I call?" — the state machine routes instantly
+- **Full auditability** — every transition, every tool call, every field extraction is logged with its deterministic cause
+
+**3. The LLM is replaceable; the workflow logic is not.**
+
+In Camp B, switching from OpenAI to Anthropic to DeepSeek only affects NLU quality and response tone — the workflow correctness is guaranteed by the state machine. In Camp A, switching models may break the tool-call reasoning that the entire system depends on. **Model replaceability is a feature, not a limitation** — it means cost, latency, and vendor risk are all under your control.
+
+#### Why the Industry Pushes Camp A
+
+The dominant narrative from model providers (OpenAI, Anthropic, Google) is Camp A: "expose all tools, let the LLM orchestrate." This is promoted through MCP's canonical usage, agent SDKs, and documentation. The reasons are not purely technical:
+
+- **LLM centrality**: If the LLM is the orchestrator, the quality of the most expensive model directly determines system quality. This creates dependency on frontier models.
+- **Token consumption**: Exposing N tools means every LLM call carries N tool schemas in context. More tools = more tokens = more revenue for token-priced APIs.
+- **Ecosystem lock-in**: Tool-call reasoning is model-specific. A system optimized for GPT-4o's tool-calling behavior may not work with a cheaper model. This raises switching costs.
+- **Product simplicity for providers**: Building an orchestration engine (state machines, guards, permissions, audit trails) is hard. Selling an API that "does it all" is easy. Camp A minimizes provider product complexity by outsourcing orchestration to the model.
+
+This framework does not dispute that Camp A is valid for open-ended tasks. It disputes the implicit claim that Camp A is the *only* way — and that more expensive models are always needed. **For regulated industries, Camp B is architecturally superior: deterministic, auditable, cheap, fast, and model-agnostic.**
+
+#### The MCP Exposure Decision (see MCP API Protocol §1.3)
+
+This philosophical positioning has a direct consequence for MCP integration: the framework exposes **coarse-grained conversation-level tools** (`send_message`) to external AI clients, NOT fine-grained internal tools. Claude/ChatGPT see one tool — "send a message to this agent" — and the framework's state machine handles everything inside. This is Camp B applied to protocol design: the LLM is a message relay, not an orchestrator.
+
 ---
 
 ## 7. What Every Spec Must Contain (Checklist)
@@ -181,6 +251,7 @@ Every spec document MUST:
 - [ ] Interface definitions (not implementations)
 - [ ] At least 2 options per interface
 - [ ] Comparison matrix for options
+- [ ] OSS-first: at least one mature OSS library referenced as a recommended implementation option (per §6.7)
 - [ ] YAML schema examples (not Python code)
 - [ ] Cross-reference to parent/child specs
 - [ ] Open questions section

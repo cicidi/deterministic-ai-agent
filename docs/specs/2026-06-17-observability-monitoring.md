@@ -12,6 +12,7 @@
 | 2026-06-17 | 0.1.0 | Initial observability spec |
 | 2026-06-17 | 0.2.0 | Replace Grafana JSON with YAML schema; add Implementation Options |
 | 2026-06-17 | 0.3.0 | Add LangFuse as Option B; all providers pluggable via ObservabilityProvider interface |
+| 2026-06-25 | 0.4.0 | Rearchitect observability stack: OpenTelemetry as the foundation (not "Option D"); add §1.3 Foundation Stack — free OSS observability architecture (OTel SDK + Collector → Prometheus + Loki + Jaeger → Grafana); add structlog for structured JSON logging; add license/cost table; add §7 implementation options repositioned with OTel as default recommendation |
 
 ---
 
@@ -20,42 +21,112 @@
 Observability answers: **"Is the framework working correctly, right now?"** and **"What is the trend over time?"** Three pillars:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                     OBSERVABILITY STACK                        │
-├──────────────────┬──────────────────┬────────────────────────┤
-│   LangSmith      │   Prometheus     │   Grafana              │
-│   (Traces)       │   (Metrics)      │   (Dashboards/Alerts)  │
-├──────────────────┼──────────────────┼────────────────────────┤
-│  - LLM call      │  - Counters      │  - Overview panel      │
-│    traces        │  - Gauges        │  - LLM Health panel    │
-│  - Step-by-step  │  - Histograms    │  - Business Metrics    │
-│    execution     │  - Summaries     │    panel               │
-│  - Prompt        │                  │  - Alert rules         │
-│    iteration     │                  │                        │
-└──────────────────┴──────────────────┴────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│                     AUDIT LOG (PostgreSQL)                     │
-│  Data source for Grafana — queryable, long-term retention     │
-└──────────────────────────────────────────────────────────────┘
+                    YOUR FRAMEWORK (Python)
+                    ┌──────────────────────┐
+                    │ OpenTelemetry SDK     │  ← traces, metrics (auto-instrumentation)
+                    │ structlog (JSON)      │  ← structured logs → stdout
+                    └──────┬───────────────┘
+                           │ OTLP         │ stdout (JSON)
+                           ▼              ▼
+                    ┌──────────────────────────────────────┐
+                    │   OpenTelemetry Collector             │
+                    │   (sidecar or daemon — optional)      │
+                    └──┬──────────┬──────────┬─────────────┘
+                       │ Traces   │ Metrics  │ Logs
+                       ▼          ▼          ▼
+                  ┌──────┐  ┌──────────┐  ┌──────┐
+                  │Jaeger│  │Prometheus│  │ Loki │   ← all FREE, all OSS
+                  └──┬───┘  └────┬─────┘  └──┬───┘
+                     │           │            │
+                     └───────────┼────────────┘
+                                 ▼
+                          ┌──────────┐
+                          │ Grafana  │  Unified dashboards (FREE, self-hosted)
+                          └──────────┘
+                                 │
+                                 ▼
+                          ┌──────────┐
+                          │LangSmith │  LLM-specific debugging (Free tier: 5K traces/mo)
+                          └──────────┘
 ```
 
 ### 1.1 What Observability Covers
 
-- ✅ **Runtime metrics** — conversation volume, completion rate, error rates, latency
-- ✅ **LLM-specific metrics** — token usage, schema validation failures, retry counts
-- ✅ **Business metrics** — goal_check 422 rate, intent gap rate, abandonment rate
-- ✅ **Dashboards** — Grafana panels for ops, engineering, and business teams
-- ✅ **Alerts** — thresholds on error rates, latency, and 422 rates
-- ✅ **Traces** — LangSmith for per-turn LLM call inspection, prompt debugging
+- ✅ **Runtime metrics** — conversation volume, completion rate, error rates, latency (Prometheus)
+- ✅ **LLM-specific metrics** — token usage, schema validation failures, retry counts, model escalation rate (Prometheus)
+- ✅ **Business metrics** — goal_check 422 rate, intent gap rate, abandonment rate (Prometheus)
+- ✅ **Distributed traces** — per-request trace across agents, nodes, and A2A calls (OpenTelemetry → Jaeger)
+- ✅ **Structured logging** — JSON logs to stdout → Loki (structlog)
+- ✅ **Dashboards** — unified panels for ops, engineering, and business (Grafana)
+- ✅ **Alerts** — thresholds on error rates, latency, 422 rates (Grafana Alerts)
 
 ### 1.2 What Observability Does NOT Cover
 
-- ❌ **Application-level logging** — structured JSON logs (handled by Python logging → stdout → log aggregator)
-- ❌ **Infrastructure monitoring** — CPU, memory, disk (handled by platform: Kubernetes, CloudWatch, Datadog)
-- ❌ **Cost tracking** — LLM token costs (future: can be added as Prometheus counter)
+- ❌ **Infrastructure monitoring** — CPU, memory, disk (handled by platform: Kubernetes, CloudWatch, Grafana Alloy)
 - ❌ **User behavior analytics** — session replays, heatmaps (outside framework scope)
+
+### 1.3 Foundation Stack — Free Open Source
+
+The framework's **recommended default** observability stack is 100% free open source. No proprietary vendor required. All components are CNCF or widely-adopted OSS:
+
+| Component | Role | License | Cost | Data Type |
+|-----------|------|---------|------|-----------|
+| **OpenTelemetry SDK** | Instrumentation (framework-side) | Apache 2.0 (CNCF) | Free | Traces + Metrics |
+| **OpenTelemetry Collector** | Receive, filter, route telemetry | Apache 2.0 (CNCF) | Free | Pipeline |
+| **Prometheus** | Metrics storage + query (PromQL) | Apache 2.0 (CNCF) | Free | Metrics |
+| **Jaeger** | Trace storage + query | Apache 2.0 (CNCF) | Free | Traces |
+| **Loki** | Log aggregation + search (LogQL) | AGPLv3 (Grafana Labs) | Free | Logs |
+| **Grafana** | Dashboards + alerts | AGPLv3 (Grafana Labs) | Free | All |
+| **structlog** | Structured JSON logging | MIT | Free | Logs |
+
+The only component that may incur cost is **LangSmith** (LLM-specific debugging):
+
+| Component | Free Tier | Paid Tier |
+|-----------|-----------|-----------|
+| LangSmith | 5,000 traces/month, 14-day retention | $39/seat/month Plus |
+
+**Minimum deployment:** All components run on a single 2C4G VPS (~$20/month server cost). The software itself is free.
+
+**Why OpenTelemetry is the foundation, not an option:** OTel decouples instrumentation (what the framework does) from storage (where the data goes). The framework only needs to instrument with OTel — the backend (Prometheus, Jaeger, Loki, Datadog, Grafana Cloud) can be chosen later without changing framework code. This is OTel's primary value proposition and why it is the CNCF standard.
+
+> **OTel signal stability:** OTel Python SDK — **Traces: Stable, Metrics: Stable, Logs: Development** (as of 2026). The framework uses OTel for traces and metrics only. For logs, **structlog** is used instead (OTel Logs SDK is still in Development status; long-term dependencies should not be taken against Development-status signals per OTel's own versioning policy). When OTel Logs reaches Stable, the structlog-to-OTel bridge can be adopted.
+
+#### Structured Logging (structlog)
+
+The framework uses **structlog** for structured JSON logging to stdout:
+
+```python
+import structlog
+
+logger = structlog.get_logger()
+
+logger.info(
+    "node_executed",
+    conversation_id="conv-123",
+    node="collect_borrower",
+    layer="L2",
+    duration_ms=42,
+    intent="submit_lead",
+)
+# Output to stdout (JSON):
+# {"timestamp": "2026-06-25T10:00:01Z", "level": "info", "event": "node_executed",
+#  "conversation_id": "conv-123", "node": "collect_borrower", "layer": "L2",
+#  "duration_ms": 42, "intent": "submit_lead"}
+```
+
+This goes through the pipeline: `structlog → stdout (JSON) → OTel Collector (optional) → Loki`. Because logs are plain JSON on stdout, they are compatible with any log aggregator (Loki, Elasticsearch, Datadog, CloudWatch). The framework does NOT require a specific log backend.
+
+```yaml
+# framework.yaml — logging configuration
+logging:
+  library: structlog                # structlog (recommended) | standard | loguru
+  format: json                      # json | text
+  level: info                       # debug | info | warn | error
+  output: stdout                    # stdout | file | otel
+  include_trace_id: true            # inject trace_id into every log line
+```
+
+Logback is NOT applicable — it is a Java-specific logging framework (SLF4J implementation). Python uses `structlog`, `logging`, or `loguru`.
 
 ---
 
@@ -632,25 +703,73 @@ observability:
 
 ## 7. Implementation Options
 
-All observability providers are pluggable via the `ObservabilityProvider` interface — same pattern as rule engines and LLM providers. Choose one per environment:
+All observability providers are pluggable via the `ObservabilityProvider` interface — same pattern as rule engines and LLM providers. Choose one per environment.
+
+The **recommended default** is Option A: 100% free open source (OpenTelemetry + Prometheus + Loki + Grafana).
 
 ```yaml
 # framework.yaml
 observability:
-  provider: grafana_prometheus    # grafana_prometheus | langfuse | datadog | opentelemetry
+  provider: opentelemetry          # opentelemetry (default) | langfuse | datadog | grafana_prometheus
 ```
 
-### 7.1 Option A: Grafana + Prometheus (Self-Hosted OSS)
+### 7.1 Option A: OpenTelemetry + Prometheus + Loki + Grafana (Default — Free OSS)
 
-Self-hosted open-source stack. Prometheus scrapes the framework's `/metrics` endpoint; Grafana renders dashboards and evaluates alert rules via Alertmanager.
+The framework instruments with the **OpenTelemetry SDK** (traces, metrics). An optional **OTel Collector** receives and routes telemetry. **Prometheus** stores metrics, **Loki** stores logs, **Jaeger** (or Grafana Tempo) stores traces, and **Grafana** provides unified dashboards and alerts.
+
+**All components are free and open source. No license cost.**
+
+```yaml
+# framework.yaml — default observability configuration
+observability:
+  provider: opentelemetry
+  otel:
+    # SDK auto-instrumentation
+    traces:
+      enabled: true
+      sampler: parentbased_traceidratio
+      sample_rate: 1.0              # 100% in dev, lower in prod
+    metrics:
+      enabled: true
+      export_interval_ms: 15000
+      prometheus_exporter: true     # expose :9090/metrics for scraping
+    resource:
+      service.name: "deterministic-workflow-framework"
+      service.version: "0.2.0"
+      deployment.environment: "${ENV}"
+
+  # OTel Collector (optional — direct export also works)
+  collector:
+    enabled: false                  # enable for multi-backend routing
+    endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+
+  # Logging — structlog JSON to stdout
+  logging:
+    library: structlog
+    format: json
+    level: info
+    include_trace_id: true
+
+  # Optional: LLM-specific observability
+  llm:
+    provider: langsmith             # langsmith (free tier: 5K traces/mo)
+    langsmith:
+      api_key: "${LANGSMITH_API_KEY}"
+      project: "${LANGSMITH_PROJECT}"
+      sample_rate: 0.1              # 10% of traces
+```
 
 | Aspect | Detail |
 |--------|--------|
-| Strengths | No vendor lock-in; zero licensing cost; rich community dashboards; direct PromQL access; GitOps-friendly (dashboards as code) |
-| Weaknesses | Operational burden (run and maintain Prometheus, Grafana, Alertmanager); storage scaling (Prometheus TSDB); no built-in log aggregation; multi-cluster federation is complex |
-| Best for | Teams with existing Kubernetes/Prometheus infrastructure; cost-sensitive deployments; open-source-first organizations |
+| Strengths | 100% free OSS (CNCF + Grafana Labs); vendor-neutral instrumentation (swap backends without code changes); unified metrics + logs + traces in Grafana; industry standard (OTel is CNCF); data sovereignty — everything is self-hosted |
+| Weaknesses | Requires operational effort (self-host Prometheus, Loki, Jaeger, Grafana); fewer turnkey LLM dashboards than LangSmith |
+| Best for | **Universal default** — startups, enterprises, regulated industries; teams that want data ownership; multi-cloud/vendor strategy |
+| Server cost | ~$20/month (single 2C4G VPS runs all components at small-mid scale) |
+| License cost | **$0** — all components are free open source |
 
-### 7.2 Option B: LangFuse (LLM-Specific Observability)
+**Minimal deployment (no Collector):** Framework → OTel SDK (direct export) → Prometheus (metrics) + Jaeger (traces); structlog stdout (JSON) → Loki (via log agent). Works without the Collector for simpler setups.
+
+### 7.2 Option B: LangSmith / LangFuse (LLM-Specific Observability)
 
 Open-source LLM observability platform focused on tracing, prompt management, and evaluation. Designed specifically for LLM applications — captures LLM calls, token usage, cost, and latency out of the box.
 
@@ -722,55 +841,24 @@ observability:
 | Weaknesses | Per-host pricing can be expensive at scale; vendor lock-in; custom metrics cost extra; data residency concerns for regulated industries |
 | Best for | Teams without dedicated observability infra; organizations already on Datadog; rapid setup with minimal ops |
 
-### 7.4 Option D: OpenTelemetry (Vendor-Neutral)
+### 7.4 Comparison Matrix
 
-The framework instruments with the OpenTelemetry SDK (traces, metrics, logs). An OTel Collector receives and exports telemetry to the backend(s) of choice — Prometheus, Datadog, Grafana Cloud, or any OTLP-compatible backend.
-
-```yaml
-# framework.yaml — OpenTelemetry integration
-observability:
-  provider: opentelemetry
-  otel:
-    exporter:
-      protocol: otlp | grpc | http
-      endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
-    traces:
-      enabled: true
-      sampler: parentbased_traceidratio
-      sample_rate: 1.0
-    metrics:
-      enabled: true
-      export_interval_ms: 15000
-      prometheus_exporter: true      # also expose /metrics for local scraping
-    logs:
-      enabled: true
-      log_level: info
-    resource:
-      service.name: "deterministic-workflow-framework"
-      service.version: "0.2.0"
-      deployment.environment: "${ENV}"
-```
-
-| Aspect | Detail |
-|--------|--------|
-| Strengths | Vendor-neutral standard (CNCF); swap backends without code changes; growing ecosystem; future-proof instrumentation investment |
-| Weaknesses | OTel is still maturing (metrics SDK stable, logs SDK experimental); added collector component to run; fewer turnkey dashboards than native solutions |
-| Best for | Multi-cloud or multi-vendor strategy; teams planning backend migrations; organizations standardizing on OTel |
-
-### 7.5 Comparison Matrix
-
-| Dimension | Option A (Grafana+Prometheus) | Option B (LangFuse) | Option C (Datadog) | Option D (OpenTelemetry) |
-|-----------|------------------------------|---------------------|--------------------|--------------------------|
-| Focus | General infrastructure | LLM-specific | General APM | Vendor-neutral standard |
-| LLM auto-instrumentation | Manual setup | ✅ Built-in | Requires custom spans | Via OTel SDK |
-| Prompt management | ❌ | ✅ Versioning + A/B | ❌ | ❌ |
-| Eval runner | ❌ | ✅ Built-in | ❌ | ❌ |
-| Cost tracking | Manual | ✅ Per-model/call | Via custom metrics | Via OTel metrics |
-| Vendor lock-in | None (OSS) | Low (OSS self-host option) | High (proprietary) | None (open standard) |
-| Operational burden | High (self-hosted) | Medium (cloud or self-host) | Low (SaaS) | Medium (run Collector) |
-| Dashboard richness | High | Medium (LLM-focused) | Very high | Dependent on backend |
-| Best for | Infra + LLM combined | LLM-centric teams | Full-stack APM | Multi-cloud/vendor strategy |
-| Self-host option | ✅ (all components) | ✅ | ❌ | ✅ (Collector + backend) |
+| Dimension | Option A (OTel+Prometheus+Loki+Grafana) | Option B (LangSmith/LangFuse) | Option C (Datadog) |
+|-----------|----------------------------------------|-------------------------------|--------------------|
+| **Role** | Foundation observability (metrics + logs + traces) | LLM-specific debugging (prompts, evals, traces) | Full-stack SaaS APM |
+| **Cost** | **$0 license** (~$20/mo server) | Free tier (5K traces/mo) + paid ($39/seat/mo) | Expensive ($15/host/mo+) |
+| **License** | Apache 2.0, AGPLv3, MIT (all OSS) | MIT (LangFuse self-host) / Proprietary (LangSmith cloud) | Proprietary |
+| **Metrics** | ✅ Prometheus (PromQL) | ❌ (LLM metrics only) | ✅ (proprietary query) |
+| **Logs** | ✅ Loki (LogQL) + structlog | ❌ | ✅ (proprietary) |
+| **Traces** | ✅ Jaeger / Tempo (OTel native) | ✅ LLM call traces | ✅ (proprietary) |
+| **LLM auto-instrumentation** | Via OTel SDK + LangSmith opt-in | ✅ Built-in | Via custom spans |
+| **Prompt management** | ❌ | ✅ Versioning + A/B | ❌ |
+| **Eval runner** | ❌ | ✅ Built-in (LangSmith) | ❌ |
+| **Vendor lock-in** | None (open standard) | Low (OSS self-host option for LangFuse) | High (proprietary) |
+| **Operational burden** | Medium (self-host 4 components) | Low (cloud) or Medium (self-host) | Low (SaaS) |
+| **Data sovereignty** | ✅ Full control | ✅ (LangFuse self-host) / ❌ (LangSmith cloud) | ❌ |
+| **Self-host option** | ✅ (all components) | ✅ (LangFuse) / ❌ (LangSmith) | ❌ |
+| **Best for** | **Universal default** — all teams | LLM-heavy teams needing prompt debugging | Teams w/o observability infra |
 
 ---
 
@@ -799,4 +887,9 @@ observability:
 - [CI/CD Pipeline](./2026-06-17-cicd-jenkins-pipeline.md) — Eval metrics tie into observability
 - [Prometheus Documentation](https://prometheus.io/docs/introduction/overview/)
 - [Grafana Documentation](https://grafana.com/docs/grafana/latest/)
+- [OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/) — CNCF standard for traces/metrics/logs instrumentation
+- [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) — vendor-neutral telemetry pipeline
+- [Jaeger](https://www.jaegertracing.io/docs/) — distributed tracing backend
+- [Loki](https://grafana.com/docs/loki/latest/) — log aggregation (LogQL, Grafana-native)
+- [structlog](https://www.structlog.org/en/stable/) — structured JSON logging for Python
 - [LangSmith Documentation](https://docs.smith.langchain.com/)

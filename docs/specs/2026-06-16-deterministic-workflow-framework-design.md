@@ -334,7 +334,7 @@ The mfangdai-agent project at `~/project/mfangdai-ai-agent/` implements all thre
 | Permission Model | `src/state_machine.py` | `_handle_borrower`/`_handle_officer` | Intent-based routing enforces role separation |
 | Knowledge Pool (RAG) | `src/knowledge.py` | 147 | 20 mortgage FAQ docs, keyword retrieval, fallback to support |
 | Privacy Relay | `src/state_machine.py` | `_officer_ask_borrower` etc. | Contact masking, RevealRequestModel, $35 payment gate |
-| Test Suite | `tests/test_functional.py` | 34 scenarios | Deterministic MockGateway, 举一反三 edge cases |
+| Test Suite | `tests/test_functional.py` | 34 scenarios | Deterministic MockGateway, inference-based edge cases |
 | Simulated LLM Tests | `tests/test_simulated.py` | SimClient with real LLM personas |
 
 **File size compliance:** All files ≤ 350 lines, all methods ≤ 50 lines (per project principle #7).

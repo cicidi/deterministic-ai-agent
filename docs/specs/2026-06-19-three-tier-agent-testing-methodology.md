@@ -170,7 +170,7 @@ class MockGateway:
 - Every state transition fires correctly
 - Every entity is written to the database
 
-**Edge cases (举一反三):**
+**Edge cases (inference-based expansion):**
 For each happy path test, write 2-3 variants by changing one dimension:
 - Different values (amounts, states, credit scores)
 - Different order of information provision
@@ -427,7 +427,7 @@ The agent strips PII (email, phone) from forwarded messages. Tier 3 tests must v
 
 ### 6.2 Expansion to 50+ Scenarios
 
-From the MVP catalog, expand by inference (举一反三):
+From the MVP catalog, expand by inference (inference-based expansion):
 
 - For each happy path (1-3): add 2-3 variants (different states, amounts, credit tiers)
 - For each edge case (4-8): add 2-3 variants (different fields corrected, different diversions)
@@ -542,7 +542,7 @@ Tests MUST be organized into tier-specific directories. This is NOT optional —
 ```
 tests/
 ├── tier1/                    # Logic tests, deterministic, no API key
-│   ├── test_workflow.py      # Happy path + variants (举一反三)
+│   ├── test_workflow.py      # Happy path + variants (inference-based)
 │   ├── test_edge_cases.py    # Corrections, diversions, boundaries, vague input
 │   └── test_error_paths.py   # Low confidence, missing entities, DB failures
 ├── tier2/                    # LLM accuracy tests
@@ -807,7 +807,7 @@ PRODUCTION-READY / NEEDS IMPROVEMENT / BLOCKED
 - Tier 3 design: confidence medium — dual-LLM conversation testing is novel; completion rate targets (70%) are provisional
 - LayerTrace: confidence high — implemented and verified in mfangdai-agent sim tests
 - Scenario catalog: confidence high — derived from Postman collection (42 use cases) adapted to generic form
-- 举一反三 principle: confidence high — demonstrated in 34 FT scenarios with 2-3 inference variants each
+- Inference-based expansion principle: confidence high — demonstrated in 34 FT scenarios with 2-3 inference variants each
 - Ambiguous intent handling: confidence high — 5 mismatches in mfangdai-agent T2 run (S02 "help" vs "ask_about_rates", S05 vague, S10 switch_lead) validated the need for soft matching
 - Script versioning: confidence medium — version field proposed but not yet integrated into the T2 runner implementation
 - Consolidated report: confidence high — template derived from actual mfangdai-agent T1+T2+T3 run on 2026-06-19

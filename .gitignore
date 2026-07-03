@@ -4,3 +4,13 @@ other-projects/
 ._.idea
 .worktrees/
 docs/specs/zh/
+
+# Project-specific
+examples/mfangdai-agent/.venv/
+examples/mfangdai-agent/__pycache__/
+examples/mfangdai-agent/**/__pycache__/
+examples/mfangdai-agent/*.db
+examples/mfangdai-agent/postman/
+examples/mfangdai-agent/.pytest_cache/
+CLAUDE.local.md
+docs/state/

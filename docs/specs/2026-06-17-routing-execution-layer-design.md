@@ -15,6 +15,8 @@
 | 2026-06-17 | 0.3.0 | Add §1.2 AgentState Concurrency Model: copy-on-write + reducer merge, conflict scenarios, reducer strategies (last_write_wins/conflict_detect/append/merge), Java ConcurrentHashMap comparison; Section 2.3: remove ≤50 lines constraint from YAML comment; delete Section 8 stub (now consolidated in Section 6); fix missing closing ``` on ASCII flow diagram in Section 6.7 |
 | 2026-06-17 | 0.4.0 | Add §5 A2A protocol cross-reference (sub-workflows as A2A definition language); add A2A Protocol spec to References |
 | 2026-06-18 | 0.5.0 | Extend `Tool.type` enum from `api \| mcp \| command \| llm` to `api \| mcp \| command \| llm \| a2a \| sdk`; add `a2a` tool type for agent-to-agent as a tool; add `sdk` tool type for OpenCode/Claude SDK as a tool |
+| 2026-06-25 | 0.6.0 | Major error handling overhaul: add §6.3 Error Classification (transient/permanent/partial) — required before strategy selection. Add §6.5 Structured Error Schema (FrameworkError with root_cause chain for cross-agent tracing). Expand strategies from 5 to 8: add `retry_with_backoff`, `graceful_degradation`, `dead_letter_queue`. Add §6.7 Strategy Decision Matrix. Update §6.8 errorNode interface to accept FrameworkError. Update §6.9 flow diagram. Add §6.10 per-node error strategy configuration with DLQ backend config. Aligns with AD #15 revision. |
+| 2026-06-25 | 0.6.1 | Fix §1.2–§1.3 concurrency model contradiction: remove absolute "all fields append-only, not configurable" claim. Split fields into two categories: audit fields (`messages`, `audit_log`, `llm_calls`) = append-only locked; business fields (`collectedFields`, `response`, `goal_check_result`, `entities`, `phase_stack`) = configurable via `state_reducers`, append is default. Update conversation-lifecycle §4.4 to match. |
 
 ---
 
@@ -82,61 +84,56 @@ Framework merge (single-threaded reducer):
 
 **Conflict scenario — parallel sub-workflow + parent:**
 
-The only scenario where a write conflict is possible is an async sub-workflow and parent both writing to the same field. The framework uses a single strategy: **append** — all parallel writes are accumulated, never overwritten.
+The only scenario where a write conflict is possible is an async sub-workflow and parent both writing to the same field. The framework handles this through configurable **state reducers** that determine how parallel writes to the same field are resolved.
+
+Fields are divided into two categories with different concurrency guarantees:
+
+| Category | Fields | Behavior | Configurable? |
+|----------|--------|----------|---------------|
+| **Audit fields** | `messages`, `audit_log`, `llm_calls` | Always append-only — framework-locked, not configurable. All parallel writes are accumulated, never overwritten. | ❌ Locked |
+| **Business fields** | `collectedFields`, `response`, `goal_check_result`, `entities`, `phase_stack` | Default: append. Configurable via `state_reducers` to `last_write_wins`, `conflict_detect`, `merge`, or `custom`. | ✅ Configurable |
 
 ```yaml
 state_reducers:
-  collectedFields:
-    strategy: append    # deep merge: new keys added, existing keys preserved
-  response:
-    strategy: append    # appended to response list for audit
+  # Audit fields — append-only, locked, not configurable
   messages:
-    strategy: append    # appended to message history
+    strategy: append    # appended to message history (framework-enforced)
+  audit_log:
+    strategy: append    # appended to audit trail (framework-enforced)
+
+  # Business fields — configurable, append is default
+  collectedFields:
+    strategy: conflict_detect   # parallel writes → raise on conflict
+    on_conflict: raise
+  response:
+    strategy: last_write_wins   # most recent response wins
+  goal_check_result:
+    strategy: last_write_wins
 ```
 
-**Why only append:** For a regulated-industry framework, no data should be silently lost. If two parallel nodes both produce output, both outputs are preserved. The downstream node (or human reviewer) decides which to use — the framework never discards data.
+**Why audit fields are locked append-only:** For a regulated-industry framework, no conversation message and no audit log entry should be silently lost. If two parallel nodes both produce output, both outputs are preserved. The downstream node (or human reviewer) decides which to use — the framework never discards audit data.
 
-Reducer behavior per type:
+**Why business fields are configurable:** Business fields (`collectedFields`, `response`, `goal_check_result`) have legitimate use cases for non-append strategies. For example, `response: last_write_wins` makes sense when parallel response generators produce competing outputs — only the most recent is relevant. `collectedFields: conflict_detect` makes sense when parallel extraction nodes should not silently accumulate conflicting values for the same field.
 
-| Field Type | Append Behavior |
-|------------|----------------|
-| List (messages, audit_log) | Append items to end of list |
-| Dict (collectedFields, entities) | Deep merge: new keys added, existing keys kept; same key from both sources → value wrapped in `[value_a, value_b]` for conflict visibility |
-| Scalar (response, intent) | Value wrapped in list: `[old, new]` |
+### 1.3 State Reducer Configuration
 
-The framework guarantees that:
-1. Serial nodes — zero contention (each node sees previous node's output before running)
-2. Parallel LLM calls (goalChecker + generateResponse) — write different fields, each appended
-3. Async sub-workflow + parent — both results appended, never lost
+**Audit fields** (`messages`, `audit_log`, `llm_calls`) are **append-only and not configurable** — the framework enforces this at load time. This guarantees that no conversation message or audit event is silently discarded.
 
-### 1.3 Append-Only Guarantee
+**Business fields** (`collectedFields`, `response`, `goal_check_result`, `entities`, `phase_stack`) are **configurable via `state_reducers`**. When `parallel_nodes` is non-empty and multiple nodes write to the same business field, the framework requires a reducer to be declared. Append is the default.
 
-All `agentState` fields use append-only semantics. This is not configurable — it is a framework-level enforcement. No parallel write is ever silently discarded.
+**YAML declaration:**
 
-**Design-time enforcement (workflow design / skill interview):**
-
-```
-Q: "Does this workflow have nodes that run in parallel?"
-   ├── No → Skip. Serial nodes don't need reducers.
-   └── Yes → All fields are append-only. No configuration needed.
-              Downstream nodes consume accumulated lists/dicts.
-```
-
-**YAML declaration (for documentation only — behavior is enforced, not configured):**
-    goal_checker:
-      writes: [goal_check_result]
-      # goal_check_result only written by this node → last_write_wins is safe
-
-  state_reducers:            # MANDATORY when parallel_nodes is non-empty
-    collectedFields:
-      strategy: conflict_detect
-      on_conflict: raise      # raise StateConflictError | log_and_override | queue
-    response:
-      strategy: last_write_wins
-    messages:
-      strategy: append
-    goal_check_result:
-      strategy: last_write_wins
+```yaml
+state_reducers:            # REQUIRED when parallel_nodes is non-empty
+  # Business fields — configurable
+  collectedFields:
+    strategy: conflict_detect
+    on_conflict: raise      # raise StateConflictError | log_and_override | queue
+  response:
+    strategy: last_write_wins
+  goal_check_result:
+    strategy: last_write_wins
+  # messages and audit_log are append-only — no declaration needed
 ```
 
 **Interface:**
@@ -156,14 +153,24 @@ Reducer {
 1. Workflow YAML loaded
 2. Framework scans for parallel_nodes
 3. If parallel_nodes is non-empty:
-   a. For each field written by a parallel node → check state_reducers has an entry
+   a. For each business field written by a parallel node → check state_reducers has an entry
    b. Missing reducer → YAML validation error, workflow REFUSED to load
-   c. All reducers present → compile into LangGraph channel reducers
+   c. Audit fields (messages, audit_log) → append-only, auto-assigned, no declaration needed
+   d. All reducers present → compile into LangGraph channel reducers
 ```
 
 **Why this matters:**
 
 Without reducers, two parallel nodes writing to the same field produce non-deterministic results — whichever finishes last wins silently. The framework catches this at load time, not at runtime, preventing silent data corruption in production.
+
+**Guarantees:**
+
+| Scenario | Guarantee |
+|----------|-----------|
+| Serial nodes | Zero contention (each node sees previous node's output before running) |
+| Parallel nodes writing to different fields | No conflict — each writes to its own field |
+| Parallel nodes writing to the same business field | Resolved by declared `state_reducers` strategy |
+| Parallel nodes writing to audit fields | Append-only — both results preserved, never lost |
 
 ---
 
@@ -677,6 +684,7 @@ retry_budget:
   backoff: exponential            # linear | exponential | fixed
   base_delay_ms: 500
   max_delay_ms: 10000
+  jitter: true                    # add randomness to prevent thundering herd
   timeout_ms: 30000               # per-attempt timeout
   on_exhausted: errorNode          # ALWAYS errorNode
 ```
@@ -685,61 +693,243 @@ retry_budget:
 
 The effective retry count is `max_attempts + 1` for LLM nodes (to compensate for non-determinism), and `max_attempts` for all other node types.
 
-### 6.3 Timeout Handling
+### 6.3 Error Classification (Required Before Strategy Selection)
 
-All timeouts (LLM timeout, API timeout, tool timeout) are treated as transient failures within the retry budget. After exhausting retries → `errorNode`.
+> **New in v0.6.0.** Before selecting a recovery strategy, the errorNode MUST classify the error into one of three types. The classification determines which strategies are valid — not all strategies work for all error types.
 
-### 6.4 Error Categories (for logging, not routing)
+Errors are classified into **three types** based on whether retrying the same operation could succeed:
 
-Errors are categorized for **audit logging**, not for separate routing paths. The `errorNode` receives the category and decides what to do:
-
-| Category | Examples |
-|----------|---------|
-| `llm_error` | LLM timeout, malformed JSON, hallucination guardrail triggered |
-| `api_error` | External API timeout, 5xx response, connection refused |
-| `tool_error` | MCP server unavailable, command non-zero exit |
-| `validation_error` | Data invariant violation, type mismatch |
-| `business_rule_error` | Loan amount, duplicate lead |
-| `permission_error` | Unauthorized tool call, forbidden transition |
-| `unrecoverable_error` | Corrupted state, missing required entity |
-
-### 6.5 errorNode Interface (Canonical Definition)
-
-> **This is the canonical, authoritative definition of errorNode.** All other spec documents (state-machine, extraction-layer, response-generation) that reference errorNode strategies MUST cross-reference this section as the single source of truth. Any discrepancy between this section and another spec's mention of errorNode is a spec bug — this section takes precedence.
-
-The `errorNode` is a unified error handling node that receives all errors from all nodes — this is the single source of truth. All other specs that reference errorNode strategies MUST cross-reference this section.
-
-Its contract:
+| Type | Can retry succeed? | Examples | Valid strategies |
+|------|-------------------|----------|-----------------|
+| **transient** | ✅ Yes — the error is temporary | API timeout, 429 rate limit, 502/503, network blip, LLM provider overload | `retry_with_backoff` (before errorNode), `fallback_value`, `graceful_degradation` |
+| **permanent** | ❌ No — same input will always fail | 400 bad request, 401 auth fail, schema validation error, field out of range, content_refusal, missing required field | `ask_clarify` (if user data), `fallback_value` (if system down), `graceful_degradation`, `dead_letter_queue`, `escalate_to_human`, `terminate` |
+| **partial** | ⚠️ Depends — some steps succeeded | Sub-workflow completed 2 of 3 steps, multi-intent: one succeeded one failed | `graceful_degradation`, `dead_letter_queue`, `terminate` |
 
 ```yaml
-# errorNode contract
-errorNode_input:
-  source: string                  # which node failed
-  category: error_category        # one of 7 categories (see §6.4)
-  attempts: integer               # retries attempted before exhaustion
-  message: string                 # human-readable error detail
+# Error classification rules (configurable)
+error_classification:
+  transient:
+    - http_timeout
+    - http_429_rate_limit
+    - http_502
+    - http_503
+    - network_error
+    - llm_provider_overload
+    - circuit_breaker_open
 
-errorNode_output:
-  action: ask_clarify | escalate_to_human | terminate | fallback_value | retry_with_context
-  correction: object              # correction instruction applied to the failed node
-  message: string                 # user-facing or log message
+  permanent:
+    - http_400_bad_request
+    - http_401_unauthorized
+    - http_403_forbidden
+    - schema_validation_error
+    - field_out_of_range
+    - missing_required_field
+    - content_refusal              # LLM safety refusal — do NOT retry
+    - business_rule_violation
+    - permission_denied
+
+  partial:
+    - sub_workflow_partial_success
+    - multi_intent_partial_fail
+    - parallel_node_partial_fail
 ```
 
-**Built-in errorNode implementations (user-selectable):**
+> **Why classify?** Because retrying a permanent error wastes budget and delays the user. Retrying a `content_refusal` (LLM safety rejection) is pointless — the model will refuse again. Retrying a `field_out_of_range` with the same value will fail again. Classification prevents these waste cycles.
 
-| Strategy | Behavior |
-|----------|---------|
-| `ask_clarify` | Re-prompt user with a clarification question, resume the failed node |
-| `escalate_to_human` | Queue for human review, suspend conversation |
-| `terminate` | Graceful exit with apology message + audit log |
-| `fallback_value` | Use a configured default value, log warning, continue |
-| `retry_with_context` | Re-invoke the failed node with enriched context (addressing specific error) |
+### 6.4 Error Categories (for audit logging)
 
-### 6.6 Relationship with Extraction Layer
+> The 7 error categories below (introduced in v0.4.0) are retained for audit logging and are orthogonal to the three error types in §6.3. A category answers "what kind of system failed?"; a type answers "can retry fix it?". Every error has both a category and a type.
 
-The Extraction Layer's `max_transform_attempts` is separate from Layer 2's node-level `retry_budget`. Extraction retries handle field-level corrections; Layer 2 retries handle node-level execution failures. Both route to `errorNode` on exhaustion.
+| Category | Type (typically) | Examples |
+|----------|-----------------|---------|
+| `llm_error` | transient or permanent | LLM timeout (transient), malformed JSON (transient), hallucination guardrail (permanent), content_refusal (permanent) |
+| `api_error` | transient or permanent | API timeout (transient), 5xx (transient), 400 (permanent), 401 (permanent) |
+| `tool_error` | transient or permanent | MCP server unavailable (transient), command non-zero exit (permanent) |
+| `validation_error` | permanent | Data invariant violation, type mismatch, field out of range |
+| `business_rule_error` | permanent | Loan amount out of range, duplicate lead |
+| `permission_error` | permanent | Unauthorized tool call, forbidden transition |
+| `unrecoverable_error` | permanent | Corrupted state, missing required entity |
 
-### 6.7 Flow Diagram
+### 6.5 Structured Error Schema
+
+> **New in v0.6.0.** Errors are not just a category + message string. They carry structured context that enables programmatic strategy selection, root-cause analysis, and cross-agent tracing.
+
+```yaml
+# Structured error envelope — used by errorNode, A2A error responses, and audit trail
+FrameworkError:
+  # --- Identity ---
+  error_id: string                 # UUID — unique per error occurrence
+  correlation_id: string           # ties to the conversation/request that caused it
+  timestamp: string                # ISO 8601
+
+  # --- Classification ---
+  category: string                 # one of 7 categories (§6.4)
+  type: string                     # transient | permanent | partial (§6.3)
+  error_code: string               # machine-readable code (e.g., "FIELD_OUT_OF_RANGE")
+  retryable: boolean               # derived from type: transient=true, permanent=false
+
+  # --- Context ---
+  source:
+    agent_id: string               # which agent/workflow produced this error
+    node_id: string                # which node failed
+    layer: string                  # L1 | L2 | L3
+  message: string                  # human-readable error description
+  
+  # --- Details (error-code-specific) ---
+  details:                         # structured fields for programmatic analysis
+    field: string                  # which field caused the error (if applicable)
+    received_value: any            # what was provided
+    expected: string               # what was expected (range, type, enum)
+    constraint: string             # which constraint was violated
+
+  # --- Root Cause Chain (for A2A / multi-agent) ---
+  root_cause:                      # nested FrameworkError — if this error was caused
+    error_id: string               # by another agent's error, the original error is
+    agent_id: string               # preserved here (read-only, not modified)
+    error_code: string             # each layer appends my_context but never deletes
+    message: string                # root_cause
+    details: {}
+    root_cause: FrameworkError     # can nest further (C's error inside B's inside A's)
+  
+  # --- Recovery hints ---
+  suggested_strategies: string[]   # errorNode may suggest which strategies fit
+  user_facing_message: string      # only set at the top level (A knows user context)
+```
+
+**Design rules for root_cause chain:**
+1. Each layer appends `my_context` (its own perspective) but **never modifies or deletes** `root_cause`
+2. `retryable` is inherited from the deepest `root_cause` — if C says not retryable, B and A inherit
+3. `user_facing_message` is only generated at the **top-level agent** (the one talking to the user)
+4. `correlation_id` is shared across the entire chain — enables trace store lookup (see A2A §6.3)
+
+**Example — credit_score=7200 out of range (3-agent chain):**
+
+```yaml
+# Agent A (mortgage) receives this error from Agent B (check_rates)
+# which received it from Agent C (eligibility)
+
+FrameworkError:
+  error_id: "err-aaa"
+  correlation_id: "conv-123"
+  timestamp: "2026-06-25T10:00:03Z"
+  category: validation_error
+  type: permanent
+  error_code: "RATE_CHECK_FAILED"
+  retryable: false
+  source:
+    agent_id: "mortgage"
+    node_id: "handle_rate_query"
+    layer: "L2"
+  message: "cannot calculate rate, eligibility rejected input"
+  details:
+    my_context: "user asked for rate quote during lead collection"
+  root_cause:
+    error_id: "err-bbb"
+    agent_id: "check_rates"
+    error_code: "DEPENDENCY_FAILED"
+    message: "eligibility check rejected the input"
+    details:
+      my_context: "rate calculation requires eligibility first"
+    root_cause:
+      error_id: "err-ccc"
+      agent_id: "eligibility"
+      error_code: "FIELD_OUT_OF_RANGE"
+      message: "credit_score=7200 out of range 300-850"
+      details:
+        field: "credit_score"
+        received_value: 7200
+        expected: "300-850 (US FICO range)"
+        constraint: "range_check"
+      root_cause: null          # original cause — no further nesting
+  suggested_strategies: ["ask_clarify"]   # user likely mistyped 720 as 7200
+  user_facing_message: "The credit score 7200 is outside the valid range (300-850). Did you mean 720?"
+```
+
+### 6.6 Recovery Strategies (Canonical Definition — 8 Strategies)
+
+> **This is the canonical, authoritative definition of errorNode strategies.** All other spec documents (state-machine, extraction-layer, response-generation, A2A-protocol) that reference errorNode strategies MUST cross-reference this section as the single source of truth. Any discrepancy between this section and another spec's mention of errorNode is a spec bug — this section takes precedence.
+
+| # | Strategy | Applicable error type | Behavior | When to use |
+|---|----------|----------------------|----------|-------------|
+| 1 | `retry_with_backoff` | transient | Retry with exponential backoff + jitter | API timeout, 429, 502/503. Runs BEFORE errorNode (in retry budget). Listed here for completeness. |
+| 2 | `retry_with_context` | permanent (LLM quality) | Re-invoke failed node with error context injected into prompt | LLM returned valid JSON but wrong content (type mismatch, missing field). NOT for safety refusals. |
+| 3 | `ask_clarify` | permanent (user data) | Re-prompt user with a clarification question | User input caused the error (field out of range, ambiguous input). NOT for system errors. |
+| 4 | `fallback_value` | permanent (system down) | Use configured default value, log warning, continue | External dependency unavailable AND a reasonable default exists. NOT for user data errors (use ask_clarify). |
+| 5 | `graceful_degradation` | partial or permanent | Return partial results, continue with reduced functionality | Non-core sub-task failed; or multi-intent where one intent succeeded. Don't fail the whole conversation for a non-core failure. |
+| 6 | `dead_letter_queue` | permanent (all auto-recovery failed) | Store failed request in DLQ, return acknowledgment to user, continue | All automated strategies exhausted. Regulated industries: never lose a request. User gets a receipt; ops team handles it async. |
+| 7 | `escalate_to_human` | permanent (permission/security) | Queue for human review, suspend conversation | Permission denied on dangerous_operation_write, or requires real-time human judgment. NOT for system timeouts (use fallback/degradation). |
+| 8 | `terminate` | permanent (unrecoverable) | Graceful exit with message + audit log | Corrupted state, auth failure after retries, suspected adversarial input. No recovery possible. |
+
+**Strategy selection rules:**
+- `retry_with_backoff` runs in the retry budget (§6.2) BEFORE errorNode is invoked
+- `retry_with_context` is for LLM nodes only (Layer 1 extraction, Layer 3 response)
+- `ask_clarify` is NOT for system errors — don't ask the user "the API timed out, can you clarify?"
+- `fallback_value` is NOT for user data errors — don't silently replace user's bad input with a default
+- `graceful_degradation` is preferred over `terminate` when partial success is meaningful
+- `dead_letter_queue` is preferred over `escalate_to_human` when the error doesn't need real-time human judgment
+- `terminate` is the last resort — only when no other strategy applies
+
+### 6.7 Strategy Decision Matrix
+
+```
+Error occurs
+    │
+    ├─ type = transient?
+    │   ├─ retry budget remaining → retry_with_backoff (in §6.2, not errorNode)
+    │   └─ retry budget exhausted → treat as permanent (fall through)
+    │
+    ├─ type = permanent?
+    │   ├─ is user data error?
+    │   │   ├─ can ask user → ask_clarify
+    │   │   └─ has default value → fallback_value (with audit warning)
+    │   │
+    │   ├─ is system/dependency error?
+    │   │   ├─ has default value → fallback_value
+    │   │   ├─ non-core failure → graceful_degradation
+    │   │   ├─ core failure, no default → dead_letter_queue
+    │   │   └─ core failure, needs real-time judgment → escalate_to_human
+    │   │
+    │   ├─ is LLM quality error?
+    │   │   ├─ format/content issue → retry_with_context
+    │   │   └─ content_refusal → dead_letter_queue (do NOT retry safety refusal)
+    │   │
+    │   ├─ is permission/security error?
+    │   │   ├─ needs approval → escalate_to_human
+    │   │   └─ suspected attack → terminate
+    │   │
+    │   └─ unrecoverable? → terminate
+    │
+    └─ type = partial?
+        ├─ failed part is non-core → graceful_degradation (return success part)
+        ├─ failed part is core, retryable → dead_letter_queue (async retry)
+        └─ failed part is core, not retryable → escalate_to_human or terminate
+```
+
+### 6.8 errorNode Interface (Canonical Definition)
+
+> **This is the canonical, authoritative definition of the errorNode interface.** All other spec documents that reference the errorNode input/output contract MUST cross-reference this section. Any discrepancy between this section and another spec's mention of errorNode I/O is a spec bug — this section takes precedence.
+
+```yaml
+# errorNode contract — v0.6.0
+errorNode_input:
+  error: FrameworkError             # structured error (§6.5), not just category + message
+  source: string                    # which node failed
+  attempts: integer                 # retries attempted before exhaustion
+  conversation_state: AgentState     # current state for context
+
+errorNode_output:
+  action: string                    # one of 8 strategies (§6.6)
+  correction: object                # correction instruction applied to the failed node
+  user_message: string              # user-facing message (generated from error + context)
+  audit_entry: object               # structured audit record
+  # For dead_letter_queue:
+  dlq_entry:                        # only present when action = dead_letter_queue
+    original_request: object        # the failed request, preserved for later retry
+    error: FrameworkError           # full error context
+    retry_after: string             # suggested retry time (ISO 8601 or null)
+```
+
+### 6.9 Flow Diagram (Updated)
 
 ```
 Node execution
@@ -748,49 +938,96 @@ Node execution
     │
     └── failure
           │
-          ├── retry (within budget) ──→ back to Node execution
-          │     LLM nodes: +1 extra retry
+          ├── classify error (§6.3): transient | permanent | partial
           │
-          └── retry exhausted ──→ errorNode
-                                      │
-                                      ├── ask_clarify (re-prompt user)
-                                      ├── escalate_to_human
-                                      ├── terminate
-                                      ├── fallback_value
-                                       └── retry_with_context
+          ├── type = transient?
+          │     ├── retry budget remaining → retry_with_backoff (jitter)
+          │     └── retry budget exhausted → errorNode
+          │
+          ├── type = permanent?
+          │     └── errorNode
+          │           ├── user data error → ask_clarify
+          │           ├── system down → fallback_value / graceful_degradation
+          │           ├── LLM quality → retry_with_context
+          │           ├── LLM safety refusal → dead_letter_queue
+          │           ├── permission/security → escalate_to_human / terminate
+          │           ├── all auto-recovery failed → dead_letter_queue
+          │           └── unrecoverable → terminate
+          │
+          └── type = partial?
+                └── errorNode
+                      ├── non-core failure → graceful_degradation
+                      └── core failure → dead_letter_queue / escalate_to_human
 ```
-### 6.8 errorNode Configuration
+
+### 6.10 errorNode Configuration
 
 ```yaml
 # Global default
 error_handling:
-  default_error_node: ask_clarify
-  max_total_errors: 5               # conversation-level: after 5 total errors → terminate
-  max_conversation_duration_ms: 300000  # 5 min hard limit: after timeout → terminate
+  default_strategy: ask_clarify       # default strategy if no per-node override
+  max_total_errors: 5                 # conversation-level: after 5 errors → terminate
+  max_conversation_duration_ms: 300000  # 5 min hard limit → terminate
+  
   errorNode_config:
+    retry_with_backoff:
+      max_attempts: 3                 # handled in retry budget (§6.2), listed for completeness
+      base_delay_ms: 500
+      max_delay_ms: 10000
+      jitter: true
+    
+    retry_with_context:
+      max_context_retries: 2          # max times to re-invoke with error context
+      prompt_strategy: summarize      # carry_forward | reset | summarize
+    
     ask_clarify:
-      max_clarifications: 3     # max re-prompts before escalating
+      max_clarifications: 3           # max re-prompts before escalating
+      on_max_exhausted: escalate_to_human
+    
+    fallback_value:
+      default_values: {}              # per-field defaults
+      audit_warning: true             # always log when fallback is used
+    
+    graceful_degradation:
+      partial_response_template: "partial results available: {{successes}}"
+      failed_part_message: "{{failed_part}} temporarily unavailable"
+    
+    dead_letter_queue:
+      backend: postgresql             # postgresql | redis | file
+      retention_days: 30
+      alert_on_count: 10              # alert ops if DLQ has >10 items
+      retry_schedule: "0 */6 * * *"   # cron: retry every 6 hours
+    
     escalate_to_human:
       queue: "agent_review"
       timeout_minutes: 15
+      notification_channel: pagerduty  # pagerduty | slack | email
+    
     terminate:
-      message_template: "I'm sorry, I ran into an error. Our team has been notified."
-    fallback_value:
-      default_values: {}        # per-field defaults
+      message_template: "I'm sorry, I ran into an unrecoverable error. Our team has been notified."
+      audit_required: true
 
 # Per-node override
 nodes:
   distribute_lead:
-    error_node: escalate_to_human  # lead distribution errors always go to human
+    error_strategy: escalate_to_human  # lead distribution errors → human
   calculate_rate:
-    error_node: fallback_value     # use default rate on calculation failure
+    error_strategy: fallback_value     # use default rate on calc failure
+  check_rates:
+    error_strategy: ask_clarify        # rate check usually needs user clarification
+  submit_lead:
+    error_strategy: dead_letter_queue  # never lose a lead submission
 ```
 
 Conversation-level budgets apply globally across all nodes in a conversation. When `max_total_errors` is exhausted OR `max_conversation_duration_ms` is exceeded, the conversation terminates regardless of per-node retry budget remaining. This bounds worst-case latency and prevents adversarial loops.
 
-### 6.9 errorNode → Conversation Continuity
+### 6.11 errorNode → Conversation Continuity
 
 After `errorNode` handles the error, the conversation resumes from the state that triggered the error. The `errorNode` does NOT change the workflow state — it returns a **correction instruction** that the framework applies to the failed node.
+
+### 6.12 Relationship with Extraction Layer
+
+The Extraction Layer's `max_transform_attempts` is separate from Layer 2's node-level `retry_budget`. Extraction retries handle field-level corrections; Layer 2 retries handle node-level execution failures. Both route to `errorNode` on exhaustion.
 
 ---
 

@@ -9,6 +9,7 @@
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-06-25 | 0.3.0 | Fix `check_rates` routing: remove from ReadOnlyAgent "NOT assigned" list (§2.1) and from "write intents" list (§3). `check_rates` is a read-only query → ReadOnlyAgent, per Intent Classification §5.2. Add cross-reference note clarifying the canonical routing. |
 | 2026-06-18 | 0.2.0 | Remove WriteAgent — write operations are state machine territory, not agent territory |
 | 2026-06-18 | 0.1.0 | Initial agent types spec — ReadOnlyAgent, WriteAgent, EscalationAgent |
 
@@ -60,7 +61,7 @@ class ReadOnlyAgent(Protocol):
         2. ask_question   — open-ended questions answered via RAG retrieval
 
     NOT assigned to this agent (deterministic, handled by state machine):
-        - help, repeat, check_rates, ask_about_lead_status → deterministic lookups
+        - help, repeat, ask_about_lead_status → deterministic lookups
     """
 
     Backend examples:
@@ -180,7 +181,9 @@ def dispatch_agent(intent: str, intent_defs: dict) -> type[Protocol]:
     return agent_map.get(intent)
 ```
 
-**Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `provide_information`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`, and all write intents like `submit_lead`, `check_rates`, `renew_policy`, `update_policy`, `cancel_policy`) are handled directly by the state machine — they are conversation control, slot-filling, or deterministic write operations.
+**Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `provide_information`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`, and all write intents like `submit_lead`, `renew_policy`, `update_policy`, `cancel_policy`) are handled directly by the state machine — they are conversation control, slot-filling, or deterministic write operations.
+
+> **Note:** `check_rates` is a **read-only query** (checking rates does not modify any data), so it routes to `ReadOnlyAgent` — NOT the state machine. See [Intent Classification §5.2](./2026-06-16-intent-classification-design.md) for the canonical intent → agent routing table. `check_rates` must NOT appear in the "write intents" list above.
 
 ---
 
