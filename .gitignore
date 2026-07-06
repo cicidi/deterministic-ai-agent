@@ -7,6 +7,7 @@ docs/specs/zh/
 .claude/
 .opencode/
 .DS_Store
+._*
 
 # Project-specific
 examples/mfangdai-agent/.venv/
