@@ -24,12 +24,12 @@
 ## Critical Issues (must fix now)
 
 ### C1: Implementation code in extraction spec (Agent 0 VIOL-1–4)
-- **File:** `extraction-layer-design.md:325-426, 846-859`
+- **File:** `05-extraction-layer-design.md:325-426, 846-859`
 - **Problem:** Contains Python `@dataclass` definitions, `validate_payload_fields` function, `INTENT_PAYLOAD_MAP` dict, `build_extraction_result` function, `LLMAuditRecord` dataclass. Violates VISION.md §4.1 "No implementation code yet."
 - **Fix:** Replace all Python code with YAML/OpenAPI schema declarations.
 
 ### C2: agentState.phase value mismatch (Agent 2 Core Design)
-- **File:** `intent-classification-design.md` vs `state-machine-design.md`
+- **File:** `04-intent-classification-design.md` vs `03-state-machine-design.md`
 - **Problem:** Intent Classification uses categories like `quoting` for `agentState.phase`; State Machine uses state names like `collect_property_info`. This would cause runtime failures — the state machine can't find a state named `quoting`.
 - **Fix:** Align phase values. Either have Intent Classification output state-machine-navigable phase names, or add a phase→state mapping layer.
 
@@ -45,12 +45,12 @@
 - **Fix:** Raise CI/CD thresholds to 95% or document the gap as aspirational vs. current.
 
 ### C5: Domain model §4.3 not migrated to OpenAPI (Agent 0 CONF-2)
-- **File:** `domain-model-design.md:378-402`
+- **File:** `02-domain-model-design.md:378-402`
 - **Problem:** Still uses old flat `entity: property_info` format after OpenAPI migration (AD 29).
 - **Fix:** Update to `$ref` references to `components/schemas/PropertyInfo`.
 
 ### C6: Parallel 2x LLM extraction unsupported by evidence (Agent 1 Core Design)
-- **File:** `extraction-layer-design.md`
+- **File:** `05-extraction-layer-design.md`
 - **Problem:** The "two-pass parallel extraction" runs 2 LLM calls simultaneously on every extraction. No research cited showing this doubles accuracy or reduces latency. Cost is 2x for uncertain benefit.
 - **Evidence:** Agent 1 found no industry pattern using parallel LLMs for the same extraction task.
 - **Fix:** Add evidence citation or make parallel extraction optional/configurable.

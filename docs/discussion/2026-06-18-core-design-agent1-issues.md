@@ -4,7 +4,7 @@
 
 ---
 
-## File A: HLD (deterministic-workflow-framework-design.md)
+## File A: HLD (01-deterministic-workflow-framework-design.md)
 
 ### A.1 — missing_alternative: LangGraph as runtime substrate — CrewAI Flows as a competing orchestration paradigm
 - **What the spec does:** Builds the entire runtime on LangGraph state graphs (YAML → LangGraph graph generation).
@@ -33,7 +33,7 @@
 
 ---
 
-## File B: State Machine Design (state-machine-design.md)
+## File B: State Machine Design (03-state-machine-design.md)
 
 ### B.1 — outdated_pattern: SCXML as semantic model (W3C Recommendation from 2015)
 - **What the spec does:** Version 1.0.0 adopts the W3C SCXML (State Chart XML) Recommendation as the state machine semantic standard with a full SCXML ↔ YAML mapping table.
@@ -66,7 +66,7 @@
 
 ---
 
-## File C: Intent Classification (intent-classification-design.md)
+## File C: Intent Classification (04-intent-classification-design.md)
 
 ### C.1 — missing_alternative: No dual-classification LLM + traditional NLU pipeline
 - **What the spec does:** §2.4 states "LLM-first classification. No keyword fallback." The sole fallback is `unrecognized_intent`.
@@ -92,7 +92,7 @@
 
 ---
 
-## File D: Domain Model (domain-model-design.md)
+## File D: Domain Model (02-domain-model-design.md)
 
 ### D.1 — missing_alternative: OpenAPI 3.1 for domain modeling — Pydantic as the Python-native alternative
 - **What the spec does:** Uses OpenAPI 3.1 Schema Objects as the canonical format for domain entities, state bindings via `x-state-bindings`.
@@ -110,7 +110,7 @@
 
 ---
 
-## File E: Extraction Layer (extraction-layer-design.md)
+## File E: Extraction Layer (05-extraction-layer-design.md)
 
 ### E.1 — missing_alternative: Parallel two-LLM extraction vs. single-LLM with chain-of-thought
 - **What the spec does:** §2.5/2.6 defines two parallel LLM calls per extraction (narrow scope + broad scope), merged via confidence matrix.

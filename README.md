@@ -143,19 +143,19 @@ A user says: *"I want to file a claim for water damage, my phone is 555-0123"*
 
 | Spec | Covers |
 |------|--------|
-| [High-Level Design](docs/specs/deterministic-workflow-framework-design.md) | 3-layer architecture, per-node control, framework principles |
-| [Intent Classification](docs/specs/intent-classification-design.md) | LLM-first, 17 system intents, multi-intent, complex flag |
-| [Extraction Layer](docs/specs/extraction-layer-design.md) | Extract/Validate/Transform pipeline, typed intent payloads, guardrail |
-| [State Machine](docs/specs/state-machine-design.md) | Transitions + LangGraph fusion, state metadata, intent+state resolution |
-| [Domain Model](docs/specs/domain-model-design.md) | Entity/State/Transition schemas, single source of truth |
-| [Routing & Execution](docs/specs/routing-execution-layer-design.md) | Executors, decision nodes, sub-workflows, retry/error handling, permissions |
-| [Response Generation](docs/specs/response-generation-layer-design.md) | Goal-driven workflow, LLM/widget modes, PII scrubbing |
-| [LLM Gateway](docs/specs/llm-gateway.md) | Mandatory JSON output, schema validation, retry logic |
-| [RAG Interface](docs/specs/rag-interface.md) | DocumentStore, Embedder, Retriever, RAGPipeline — adopt, don't invent |
-| [Agent Types](docs/specs/agent-types.md) | ReadOnlyAgent, EscalationAgent — intent→agent dispatch; writes stay in state machine |
-| [Tool Ecosystem](docs/specs/tool-ecosystem.md) | LangFlow, LangGraph CLI, LangSmith, rule engines, MCP |
-| [Environment Config](docs/specs/environment-config.md) | dev/e2e/prod, env hierarchy, per-env thresholds |
-| [Auth & Token](docs/specs/auth-token-verification.md) | JWT/OAuth/OIDC, multi-tenant isolation |
+| [High-Level Design](docs/specs/01-deterministic-workflow-framework-design.md) | 3-layer architecture, per-node control, framework principles |
+| [Intent Classification](docs/specs/04-intent-classification-design.md) | LLM-first, 17 system intents, multi-intent, complex flag |
+| [Extraction Layer](docs/specs/05-extraction-layer-design.md) | Extract/Validate/Transform pipeline, typed intent payloads, guardrail |
+| [State Machine](docs/specs/03-state-machine-design.md) | Transitions + LangGraph fusion, state metadata, intent+state resolution |
+| [Domain Model](docs/specs/02-domain-model-design.md) | Entity/State/Transition schemas, single source of truth |
+| [Routing & Execution](docs/specs/06-routing-execution-layer-design.md) | Executors, decision nodes, sub-workflows, retry/error handling, permissions |
+| [Response Generation](docs/specs/08-response-generation-layer-design.md) | Goal-driven workflow, LLM/widget modes, PII scrubbing |
+| [LLM Gateway](docs/specs/14-llm-gateway.md) | Mandatory JSON output, schema validation, retry logic |
+| [RAG Interface](docs/specs/20-rag-interface.md) | DocumentStore, Embedder, Retriever, RAGPipeline — adopt, don't invent |
+| [Agent Types](docs/specs/10-agent-types.md) | ReadOnlyAgent, EscalationAgent — intent→agent dispatch; writes stay in state machine |
+| [Tool Ecosystem](docs/specs/13-tool-ecosystem.md) | LangFlow, LangGraph CLI, LangSmith, rule engines, MCP |
+| [Environment Config](docs/specs/18-environment-config.md) | dev/e2e/prod, env hierarchy, per-env thresholds |
+| [Auth & Token](docs/specs/16-auth-token-verification.md) | JWT/OAuth/OIDC, multi-tenant isolation |
 
 ### Example: Home Insurance
 

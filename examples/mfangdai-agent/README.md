@@ -24,4 +24,4 @@ A mortgage lead collection chatbot built on the three-layer deterministic workfl
 ## See Also
 
 - [PRD.md](./PRD.md) — full product requirements document
-- [deterministic-workflow-framework](../../docs/specs/deterministic-workflow-framework-design.md)
+- [deterministic-workflow-framework](../../docs/specs/01-deterministic-workflow-framework-design.md)

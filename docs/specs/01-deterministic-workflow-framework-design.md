@@ -186,29 +186,29 @@ Permission enforcement happens at two levels:
 1. **Config-level** — statically declared in workflow YAML (node/tool allowlists)
 2. **OAuth / Role-based** — dynamic enforcement based on authenticated user's role at runtime
 
-Detailed permission design in [Routing & Execution Layer](./routing-execution-layer-design.md).
+Detailed permission design in [Routing & Execution Layer](./06-routing-execution-layer-design.md).
 
 ## 5. Related Design Documents
 
-- **[State Machine Design](./state-machine-design.md)** — Detailed FSM layer design: transitions + LangGraph fusion, state metadata (preconditions, guards, invariants), intent+state resolution, and FSM-specific open questions.
-- **[Intent Classification Design](./intent-classification-design.md)** — Layer 1 intent classification strategy: LLM-first, confidence threshold, 17 system intents, multi-intent detection.
-- **[Extraction Layer Design](./extraction-layer-design.md)** — Layer 1 entity extraction: Extract/Validate/Transform pipeline with multiple implementation options.
-- **[Domain Model Design](./domain-model-design.md)** — Single source of truth: Entity + State + Transition schemas, cross-workflow reuse.
-- **[Routing & Execution Layer Design](./routing-execution-layer-design.md)** — Layer 2 routing and execution: business logic, decision nodes, phase-aware routing, retry budgets, sub-workflow reuse, permission model.
-- **[Response Generation Layer Design](./response-generation-layer-design.md)** — Layer 3 response generation: message composition, widget rendering, PII scrubbing.
-- **[LLM Gateway](./llm-gateway.md)** — Gatekeeper for all LLM calls: schema validation, retry, timeout, cost tracking, provider routing.
-- **[Tool Ecosystem](./tool-ecosystem.md)** — Visual editor (LangFlow), rule engines, MCP servers, PII detection (Presidio), LLM providers, pycasbin permission enforcement.
-- **[Environment Config](./environment-config.md)** — Multi-environment configuration: dev, e2e, prod settings, secrets management, feature flags.
-- **[Auth & Token Verification](./auth-token-verification.md)** — Authentication and token verification: OAuth scopes, session tokens, role-based access.
-- **[MCP API Protocol](./mcp-api-protocol.md)** — MCP API protocol specification: tool discovery, invocation patterns, server lifecycle.
-- **[A2A Protocol](./a2a-protocol.md)** — Agent-to-Agent protocol: inter-agent communication, message routing, agent coordination.
-- **[Conversation Lifecycle](./conversation-lifecycle.md)** — Conversation lifecycle management: creation, pause/resume, checkpoint, archival, termination.
-- **[Observability & Monitoring](./observability-monitoring.md)** — Metrics, tracing, alerting, Grafana dashboards, LangSmith integration.
-- **[CI/CD Pipeline](./cicd-jenkins-pipeline.md)** — Automated validation, evaluation, build, and deployment pipeline with gated environment promotion.
-- **[Rate Limiting](./rate-limiting.md)** — Rate limiting strategy: per-user, per-workflow, per-LLM-provider throttling.
-- **[Widget Templates](./widget-templates.md)** — Widget template system: structured UI components for Layer 3 responses.
-- **[RAG Interface](./rag-interface.md)** — Retrieval-Augmented Generation abstraction: Document, DocumentStore, Embedder, Retriever, RAGPipeline interfaces with backend adapters.
-- **[Agent Types](./agent-types.md)** — Specialized execution agents (ReadOnlyAgent, EscalationAgent) dispatched by the state machine for specific intent categories.
+- **[State Machine Design](./03-state-machine-design.md)** — Detailed FSM layer design: transitions + LangGraph fusion, state metadata (preconditions, guards, invariants), intent+state resolution, and FSM-specific open questions.
+- **[Intent Classification Design](./04-intent-classification-design.md)** — Layer 1 intent classification strategy: LLM-first, confidence threshold, 17 system intents, multi-intent detection.
+- **[Extraction Layer Design](./05-extraction-layer-design.md)** — Layer 1 entity extraction: Extract/Validate/Transform pipeline with multiple implementation options.
+- **[Domain Model Design](./02-domain-model-design.md)** — Single source of truth: Entity + State + Transition schemas, cross-workflow reuse.
+- **[Routing & Execution Layer Design](./06-routing-execution-layer-design.md)** — Layer 2 routing and execution: business logic, decision nodes, phase-aware routing, retry budgets, sub-workflow reuse, permission model.
+- **[Response Generation Layer Design](./08-response-generation-layer-design.md)** — Layer 3 response generation: message composition, widget rendering, PII scrubbing.
+- **[LLM Gateway](./14-llm-gateway.md)** — Gatekeeper for all LLM calls: schema validation, retry, timeout, cost tracking, provider routing.
+- **[Tool Ecosystem](./13-tool-ecosystem.md)** — Visual editor (LangFlow), rule engines, MCP servers, PII detection (Presidio), LLM providers, pycasbin permission enforcement.
+- **[Environment Config](./18-environment-config.md)** — Multi-environment configuration: dev, e2e, prod settings, secrets management, feature flags.
+- **[Auth & Token Verification](./16-auth-token-verification.md)** — Authentication and token verification: OAuth scopes, session tokens, role-based access.
+- **[MCP API Protocol](./11-mcp-api-protocol.md)** — MCP API protocol specification: tool discovery, invocation patterns, server lifecycle.
+- **[A2A Protocol](./12-a2a-protocol.md)** — Agent-to-Agent protocol: inter-agent communication, message routing, agent coordination.
+- **[Conversation Lifecycle](./07-conversation-lifecycle.md)** — Conversation lifecycle management: creation, pause/resume, checkpoint, archival, termination.
+- **[Observability & Monitoring](./15-observability-monitoring.md)** — Metrics, tracing, alerting, Grafana dashboards, LangSmith integration.
+- **[CI/CD Pipeline](./19-cicd-jenkins-pipeline.md)** — Automated validation, evaluation, build, and deployment pipeline with gated environment promotion.
+- **[Rate Limiting](./17-rate-limiting.md)** — Rate limiting strategy: per-user, per-workflow, per-LLM-provider throttling.
+- **[Widget Templates](./09-widget-templates.md)** — Widget template system: structured UI components for Layer 3 responses.
+- **[RAG Interface](./20-rag-interface.md)** — Retrieval-Augmented Generation abstraction: Document, DocumentStore, Embedder, Retriever, RAGPipeline interfaces with backend adapters.
+- **[Agent Types](./10-agent-types.md)** — Specialized execution agents (ReadOnlyAgent, EscalationAgent) dispatched by the state machine for specific intent categories.
 - **[Mortgage Lead Examples](../examples/mortgage-lead/)** — Complete workflow definition (`workflow.yaml`), intent catalog, end-to-end scenarios.
 
 ## 6. Downstream: Skill-Assisted Spec Generation
@@ -244,24 +244,24 @@ The framework specs are designed with clear decision boundaries: **"framework de
 ```
 docs/
 ├── specs/
-│   ├── deterministic-workflow-framework-design.md  ← This document (HLD)
-│   ├── state-machine-design.md
-│   ├── intent-classification-design.md
-│   ├── extraction-layer-design.md
-│   ├── domain-model-design.md
-│   ├── routing-execution-layer-design.md
-│   ├── response-generation-layer-design.md
-│   ├── llm-gateway.md
-│   ├── tool-ecosystem.md
-│   ├── environment-config.md
-│   ├── auth-token-verification.md
-│   ├── mcp-api-protocol.md
-│   ├── a2a-protocol.md
-│   ├── conversation-lifecycle.md
-│   ├── observability-monitoring.md
-│   ├── cicd-jenkins-pipeline.md
-│   ├── rate-limiting.md
-│   ├── widget-templates.md
+│   ├── 01-deterministic-workflow-framework-design.md  ← This document (HLD)
+│   ├── 03-state-machine-design.md
+│   ├── 04-intent-classification-design.md
+│   ├── 05-extraction-layer-design.md
+│   ├── 02-domain-model-design.md
+│   ├── 06-routing-execution-layer-design.md
+│   ├── 08-response-generation-layer-design.md
+│   ├── 14-llm-gateway.md
+│   ├── 13-tool-ecosystem.md
+│   ├── 18-environment-config.md
+│   ├── 16-auth-token-verification.md
+│   ├── 11-mcp-api-protocol.md
+│   ├── 12-a2a-protocol.md
+│   ├── 07-conversation-lifecycle.md
+│   ├── 15-observability-monitoring.md
+│   ├── 19-cicd-jenkins-pipeline.md
+│   ├── 17-rate-limiting.md
+│   ├── 09-widget-templates.md
 │   └── zh/
 ├── examples/
 │   └── mortgage-lead/
@@ -274,7 +274,7 @@ docs/
 ## Appendix: Implementation Planning — Open Questions (Non-State-Machine)
 
 > Questions identified during design but deferred for implementation planning.
-> For state machine specific questions, see [State Machine Design](./state-machine-design.md) Appendix C.
+> For state machine specific questions, see [State Machine Design](./03-state-machine-design.md) Appendix C.
 
 ### A.1 LLM Integration
 

@@ -1,6 +1,6 @@
 # Environment Configuration
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Environment-specific configuration for dev, e2e, and prod deployments.
 
 ---
@@ -376,7 +376,7 @@ config_loading:
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — Section 4.1, framework principles
-- [Tool Ecosystem](./tool-ecosystem.md) — LangSmith, LangGraph CLI
-- [Routing & Execution](./routing-execution-layer-design.md) — retry budgets, permission model
-- [Response Generation](./response-generation-layer-design.md) — gap threshold, PII scrubbing
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — Section 4.1, framework principles
+- [Tool Ecosystem](./13-tool-ecosystem.md) — LangSmith, LangGraph CLI
+- [Routing & Execution](./06-routing-execution-layer-design.md) — retry budgets, permission model
+- [Response Generation](./08-response-generation-layer-design.md) — gap threshold, PII scrubbing

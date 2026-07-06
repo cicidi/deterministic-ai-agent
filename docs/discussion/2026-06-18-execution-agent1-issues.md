@@ -8,7 +8,7 @@
 
 ## 1. missing_alternative — Custom A2A Format vs Google A2A Protocol Standard
 
-**Affected:** `a2a-protocol.md` §2.2; `routing-execution-layer-design.md` §5
+**Affected:** `12-a2a-protocol.md` §2.2; `06-routing-execution-layer-design.md` §5
 
 The spec defines a **custom A2A message format** (a2a_request/a2a_response YAML schemas with `goal`, `entities`, `constraints`). Meanwhile, the **Google A2A Protocol** (`github.com/a2aproject/A2A`, 24.4k stars, Apache 2.0, Linux Foundation project) defines a competing standard with:
 
@@ -31,7 +31,7 @@ The spec references Google A2A in §References but **does not adopt its wire for
 
 ## 2. missing_alternative — Temporal.io Durability vs LangGraph Checkpoints
 
-**Affected:** `routing-execution-layer-design.md` §1.2; `tool-ecosystem.md` §8
+**Affected:** `06-routing-execution-layer-design.md` §1.2; `13-tool-ecosystem.md` §8
 
 The spec builds its durability model on **LangGraph checkpoints** (postgres-backed). Temporal.io (`temporal.io`, 12k+ GitHub stars) provides a fundamentally different model:
 
@@ -54,7 +54,7 @@ The spec never discusses why LangGraph checkpoints were chosen over Temporal's e
 
 ## 3. missing_alternative — OpenAI Agents SDK Guardrails vs Custom Validation
 
-**Affected:** `routing-execution-layer-design.md` §3, §7; `response-generation-layer-design.md` §3
+**Affected:** `06-routing-execution-layer-design.md` §3, §7; `08-response-generation-layer-design.md` §3
 
 The spec builds a custom permission model (§7) and decision eval framework (§3.4). The **OpenAI Agents SDK** (`github.com/openai/openai-agents-python`, 27.2k stars, MIT) provides:
 
@@ -77,7 +77,7 @@ The spec explicitly ties to LangGraph/LangChain but never evaluates whether the 
 
 ## 4. missing_alternative — CrewAI Role-Based Multi-Agent vs Sub-Workflow Model
 
-**Affected:** `routing-execution-layer-design.md` §5; `a2a-protocol.md` §1
+**Affected:** `06-routing-execution-layer-design.md` §5; `12-a2a-protocol.md` §1
 
 The spec models sub-workflows as complete StateGraph instances with their own domain models — a **structural decomposition** approach. **CrewAI** (`crewai.com`, used by 63% of Fortune 500, 100k+ developers) takes a **role-based decomposition** approach:
 
@@ -100,7 +100,7 @@ The spec never addresses **when a role-based model might be preferable** to a st
 
 ## 5. wrong_approach — All-Errors-to-`errorNode` as a Single Pattern
 
-**Affected:** `routing-execution-layer-design.md` §6.1
+**Affected:** `06-routing-execution-layer-design.md` §6.1
 
 > "No per-category dispatch. No multi-link escalation chain. All errors, all timeouts, all retry-exhausted failures — route to a single `errorNode` for unified handling."
 
@@ -124,7 +124,7 @@ The spec acknowledges this partly via per-node `error_node` overrides (§6.8) bu
 
 ## 6. wrong_approach — Decision Nodes as Top-to-Bottom Rule Lists
 
-**Affected:** `routing-execution-layer-design.md` §3.2
+**Affected:** `06-routing-execution-layer-design.md` §3.2
 
 The `decision_rules` YAML format is a simple top-to-bottom, first-match-wins rule list. This is **equivalent to a chain of if-else statements** — the weakest form of rule engine.
 
@@ -184,7 +184,7 @@ The spec should either:
 
 ## 8. weak_rationale — Goal Checker as LLM-Based Without Discussing Deterministic Alternatives
 
-**Affected:** `response-generation-layer-design.md` §4
+**Affected:** `08-response-generation-layer-design.md` §4
 
 The goal checker (§4.1) is described as "an LLM node" that produces `GoalCheckResult` JSON. The rationale is not provided. A deterministic goal checker is equally viable:
 
@@ -237,7 +237,7 @@ The industry trend is clear: LangChain itself says "LangGraph [is] our low-level
 
 ## 10. missing_alternative — Response Streaming Not Addressed
 
-**Affected:** `response-generation-layer-design.md` §3; `mcp-api-protocol.md`
+**Affected:** `08-response-generation-layer-design.md` §3; `11-mcp-api-protocol.md`
 
 The MCP spec mentions SSE transport for the server but streaming of the **generated response content to the end user** is never addressed. The Response Generation spec (§3) assumes a complete `ResponseMessage` is built and returned. Industry practice now includes:
 
@@ -255,7 +255,7 @@ For chat UX, this is a regression from current AI chatbots that stream immediate
 
 ## 11. missing_alternative — MCP Sampling & Elicitation Features
 
-**Affected:** `mcp-api-protocol.md` §2.2
+**Affected:** `11-mcp-api-protocol.md` §2.2
 
 The spec's MCP capability advertisement (§2.2) lists only `tools` and `resources`. The MCP 2025-06-18 spec includes additional server-initiated features:
 

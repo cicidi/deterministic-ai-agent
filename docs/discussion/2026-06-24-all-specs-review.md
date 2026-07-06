@@ -17,31 +17,31 @@
 ### Core Architecture Specs (7)
 | # | File | Lines |
 |---|------|-------|
-| 1 | deterministic-workflow-framework-design.md (HLD) | 340 |
-| 2 | state-machine-design.md | 733 |
-| 3 | domain-model-design.md | 997 |
-| 4 | intent-classification-design.md | 501 |
-| 5 | extraction-layer-design.md | 921 |
-| 6 | routing-execution-layer-design.md | 960 |
-| 7 | response-generation-layer-design.md | 630 |
+| 1 | 01-deterministic-workflow-framework-design.md (HLD) | 340 |
+| 2 | 03-state-machine-design.md | 733 |
+| 3 | 02-domain-model-design.md | 997 |
+| 4 | 04-intent-classification-design.md | 501 |
+| 5 | 05-extraction-layer-design.md | 921 |
+| 6 | 06-routing-execution-layer-design.md | 960 |
+| 7 | 08-response-generation-layer-design.md | 630 |
 
 ### Infrastructure & Protocol Specs (13)
 | # | File | Lines |
 |---|------|-------|
-| 8 | llm-gateway.md | 983 |
-| 9 | tool-ecosystem.md | 1311 |
-| 10 | environment-config.md | 382 |
-| 11 | observability-monitoring.md | 802 |
-| 12 | rate-limiting.md | 563 |
-| 13 | a2a-protocol.md | 548 |
-| 14 | mcp-api-protocol.md | 612 |
-| 15 | auth-token-verification.md | 368 |
-| 16 | cicd-jenkins-pipeline.md | 950 |
-| 17 | conversation-lifecycle.md | 693 |
-| 18 | widget-templates.md | 679 |
-| 19 | agent-types.md | 244 |
-| 20 | rag-interface.md | 334 |
-| 21 | three-tier-agent-testing-methodology.md | 814 |
+| 8 | 14-llm-gateway.md | 983 |
+| 9 | 13-tool-ecosystem.md | 1311 |
+| 10 | 18-environment-config.md | 382 |
+| 11 | 15-observability-monitoring.md | 802 |
+| 12 | 17-rate-limiting.md | 563 |
+| 13 | 12-a2a-protocol.md | 548 |
+| 14 | 11-mcp-api-protocol.md | 612 |
+| 15 | 16-auth-token-verification.md | 368 |
+| 16 | 19-cicd-jenkins-pipeline.md | 950 |
+| 17 | 07-conversation-lifecycle.md | 693 |
+| 18 | 09-widget-templates.md | 679 |
+| 19 | 10-agent-types.md | 244 |
+| 20 | 20-rag-interface.md | 334 |
+| 21 | 21-three-tier-agent-testing-methodology.md | 814 |
 
 ### Examples (6)
 | # | File | Lines |

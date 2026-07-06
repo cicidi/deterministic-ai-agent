@@ -1,6 +1,6 @@
 # CI/CD Pipeline (Jenkins)
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Jenkins declarative pipeline, eval stages, environment promotion, rollback strategy.
 
 ---
@@ -931,20 +931,20 @@ pipeline:
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — §2 Core Architecture, §4.1 Framework Principles
-- [Environment Config](./environment-config.md) — dev, e2e, prod environment settings
-- [Observability & Monitoring](./observability-monitoring.md) — Metrics, alerts, Grafana dashboards
-- [LLM Gateway](./llm-gateway.md) — Schema validation (tested in eval stages)
-- [Response Generation](./response-generation-layer-design.md) — Goal check 422 behavior (eval gate)
-- [Extraction Layer](./extraction-layer-design.md) — Entity extraction (eval F1 metric)
-- [Intent Classification](./intent-classification-design.md) — Intent accuracy (eval gate)
-- [Three-Tier Testing Methodology](./three-tier-agent-testing-methodology.md) — Tier 1/2/3 test stages
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — §2 Core Architecture, §4.1 Framework Principles
+- [Environment Config](./18-environment-config.md) — dev, e2e, prod environment settings
+- [Observability & Monitoring](./15-observability-monitoring.md) — Metrics, alerts, Grafana dashboards
+- [LLM Gateway](./14-llm-gateway.md) — Schema validation (tested in eval stages)
+- [Response Generation](./08-response-generation-layer-design.md) — Goal check 422 behavior (eval gate)
+- [Extraction Layer](./05-extraction-layer-design.md) — Entity extraction (eval F1 metric)
+- [Intent Classification](./04-intent-classification-design.md) — Intent accuracy (eval gate)
+- [Three-Tier Testing Methodology](./21-three-tier-agent-testing-methodology.md) — Tier 1/2/3 test stages
 
 ---
 
 ## 10. Example Infrastructure
 
 See [docs/examples/cicd/hetzner-jenkins.md](../../examples/cicd/hetzner-jenkins.md) for a concrete Hetzner + Jenkins reference implementation including Terraform, cloud-init, and a Jenkinsfile with Tier 1/2/3 test stages + GitHub webhook integration. Copy and adapt for your project.
-- [Conversation Lifecycle](./conversation-lifecycle.md) — Checkpoint rollback integration
+- [Conversation Lifecycle](./07-conversation-lifecycle.md) — Checkpoint rollback integration
 - [Jenkins Declarative Pipeline](https://www.jenkins.io/doc/book/pipeline/syntax/)
 - [Jenkins Kubernetes Plugin](https://plugins.jenkins.io/kubernetes/)

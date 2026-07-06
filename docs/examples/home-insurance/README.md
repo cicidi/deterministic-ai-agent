@@ -1,6 +1,6 @@
 # Home Insurance Workflow — Examples
 
-> Reference examples for [Deterministic Workflow Framework](../../specs/deterministic-workflow-framework-design.md).
+> Reference examples for [Deterministic Workflow Framework](../../specs/01-deterministic-workflow-framework-design.md).
 > All examples use **home insurance** as the unified domain.
 
 ## Files

@@ -5,7 +5,7 @@
 
 ---
 
-## File A: HLD (deterministic-workflow-framework-design.md)
+## File A: HLD (01-deterministic-workflow-framework-design.md)
 
 ### A.1 — consistency: `errorNode` referenced but not defined in HLD
 - **Location:** Line 131, 168; Section 4.1 table row "Deterministic fallback"
@@ -43,7 +43,7 @@
 
 ---
 
-## File B: State Machine Design (state-machine-design.md)
+## File B: State Machine Design (03-state-machine-design.md)
 
 ### B.1 — missing_edge_case: What happens when both `exit_guard_blocked` and `context_incomplete` are true?
 - **Location:** §3.3 meta-variables list, §3.4 guard expression
@@ -71,7 +71,7 @@
 
 ### B.5 — correctness: `multipleOf` referenced in §2.3 advanced patterns but not defined in domain model
 - **Location:** §2.3 (Domain Model), key patterns table row "`multipleOf`" (line 260)
-- **Issue:** The domain model's §2.3 says `multipleOf` is a key pattern: "Numeric step constraint (coverage in $100 increments)." But the Domain Model spec (domain-model-design.md) does not list `multipleOf` anywhere in the "Every field must define two core parameters" table (§3), which only lists `required` and `regex`. The `multipleOf` keyword is part of JSON Schema (and OpenAPI 3.1) but the framework's auto-generation logic (§9 step 3b) does not mention processing `multipleOf` into a ValidationRule. This means the advertised feature has no implementation path.
+- **Issue:** The domain model's §2.3 says `multipleOf` is a key pattern: "Numeric step constraint (coverage in $100 increments)." But the Domain Model spec (02-domain-model-design.md) does not list `multipleOf` anywhere in the "Every field must define two core parameters" table (§3), which only lists `required` and `regex`. The `multipleOf` keyword is part of JSON Schema (and OpenAPI 3.1) but the framework's auto-generation logic (§9 step 3b) does not mention processing `multipleOf` into a ValidationRule. This means the advertised feature has no implementation path.
 - **Severity:** High (broken feature claim)
 
 ### B.6 — missing_edge_case: `on_take` transitions that target the same state as source
@@ -91,7 +91,7 @@
 
 ---
 
-## File C: Intent Classification (intent-classification-design.md)
+## File C: Intent Classification (04-intent-classification-design.md)
 
 ### C.1 — missing_edge_case: What happens when LLM Gateway is entirely unavailable?
 - **Location:** §2.4, §3.4
@@ -124,7 +124,7 @@
 
 ---
 
-## File D: Domain Model (domain-model-design.md)
+## File D: Domain Model (02-domain-model-design.md)
 
 ### D.1 — correctness: `$ref` reference `#/components/schemas/PropertyInfo` not defined in example
 - **Location:** §2.2 line 133–134: `$ref: "#/components/schemas/PropertyInfo"` and `$ref: "#/components/schemas/CoverageInfo"`
@@ -158,7 +158,7 @@
 
 ---
 
-## File E: Extraction Layer (extraction-layer-design.md)
+## File E: Extraction Layer (05-extraction-layer-design.md)
 
 ### E.1 — correctness: Confidence matrix in §2.6 has an undefined cell
 - **Location:** §2.6, resolution matrix, row "LLM 1 ≥ 0.7, LLM 2 ≥ 0.7" → "Use LLM 1 (if conf1 ≥ conf2) or LLM 2"
@@ -221,7 +221,7 @@
   - SM: "provides unified error handling, defined in Routing & Execution spec Section 6" (deferred)
   - DM: "Always reachable. Framework-level primitive. Do not declare." (most specific)
   - EL: "on_transform_failure node → ultimately routes to errorNode" (nested reference)
-  - There is no single canonical definition. The Routing & Execution spec Section 6 is referenced as the authority but does not exist in the document tree (the spec file is `routing-execution-layer-design.md`).
+  - There is no single canonical definition. The Routing & Execution spec Section 6 is referenced as the authority but does not exist in the document tree (the spec file is `06-routing-execution-layer-design.md`).
 - **Severity:** High (no single source of truth for a critical safety primitive)
 
 ### X.3 — Domain model states vs. workflow states: separate but overlapping definitions

@@ -1,6 +1,6 @@
 # Conversation Lifecycle
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Full conversation lifecycle states, checkpoint strategy, timeout policy, resume flow, audit trail, multi-device support.
 
 ---
@@ -275,7 +275,7 @@ checkpoint:
       tool_calls: array               # tool invocation records
 ```
 
-The canonical AgentState schema is defined in [Domain Model §10.1](./domain-model-design.md).
+The canonical AgentState schema is defined in [Domain Model §10.1](./02-domain-model-design.md).
 
 ### 4.3 Per-Environment Checkpoint Backend
 
@@ -306,7 +306,7 @@ checkpoint:
 
 ### 4.4 Parallel Node Checkpoints
 
-When parallel nodes complete concurrently (e.g., goalChecker + generateResponse), both produce state updates that merge into the checkpoint. **Audit fields** (`messages`, `audit_log`, `llm_calls`) use append-only semantics — all updates are accumulated, never overwritten. **Business fields** (`collectedFields`, `response`, `goal_check_result`, `entities`, `phase_stack`) are resolved by the `state_reducers` declared in the workflow YAML. See [Routing & Execution §1.2–§1.3](./routing-execution-layer-design.md) for the concurrency model and reducer strategies. LangGraph's built-in checkpoint reducer handles the merge atomically — the framework does not need explicit locking.
+When parallel nodes complete concurrently (e.g., goalChecker + generateResponse), both produce state updates that merge into the checkpoint. **Audit fields** (`messages`, `audit_log`, `llm_calls`) use append-only semantics — all updates are accumulated, never overwritten. **Business fields** (`collectedFields`, `response`, `goal_check_result`, `entities`, `phase_stack`) are resolved by the `state_reducers` declared in the workflow YAML. See [Routing & Execution §1.2–§1.3](./06-routing-execution-layer-design.md) for the concurrency model and reducer strategies. LangGraph's built-in checkpoint reducer handles the merge atomically — the framework does not need explicit locking.
 
 If both nodes write to the same dict key (e.g., both append to `collectedFields`), the append ensures both values are preserved. If a conflict is detected (two nodes write conflicting values for the same non-list field), the value is wrapped as `[old, new]` for downstream resolution.
 
@@ -666,7 +666,7 @@ When `enabled: false`, all limits are bypassed — used for testing and evaluati
 
 Non-business intents (`greeting`, `small_talk`, `out_of_scope`) each consume a chitchat turn. Business intents (`submit_lead`, `check_rates`, `provide_information`) do not count toward chitchat limit. Unrecognized intents (`unrecognized_intent`) count only toward the unrecognized limit.
 
-These limits integrate with the [Rate Limiting spec](./rate-limiting.md) for per-user/per-intent rate enforcement.
+These limits integrate with the [Rate Limiting spec](./17-rate-limiting.md) for per-user/per-intent rate enforcement.
 
 ---
 
@@ -685,10 +685,10 @@ These limits integrate with the [Rate Limiting spec](./rate-limiting.md) for per
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — §2 Context Hydration + Three Layers, §4.1 Framework Principles
-- [Auth & Token Verification](./auth-token-verification.md) — §2.3 UserContext schema, user_id origin
-- [Routing & Execution](./routing-execution-layer-design.md) — §1.2 AgentState concurrency, checkpoint interaction
-- [Domain Model Design](./domain-model-design.md) — Workflow FSM states (distinct from lifecycle states)
-- [Environment Config](./environment-config.md) — Checkpoint backend per environment
-- [Observability & Monitoring](./observability-monitoring.md) — Lifecycle metrics in Grafana dashboards
-- [State Machine Design](./state-machine-design.md) — Business state transitions (distinct from lifecycle)
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — §2 Context Hydration + Three Layers, §4.1 Framework Principles
+- [Auth & Token Verification](./16-auth-token-verification.md) — §2.3 UserContext schema, user_id origin
+- [Routing & Execution](./06-routing-execution-layer-design.md) — §1.2 AgentState concurrency, checkpoint interaction
+- [Domain Model Design](./02-domain-model-design.md) — Workflow FSM states (distinct from lifecycle states)
+- [Environment Config](./18-environment-config.md) — Checkpoint backend per environment
+- [Observability & Monitoring](./15-observability-monitoring.md) — Lifecycle metrics in Grafana dashboards
+- [State Machine Design](./03-state-machine-design.md) — Business state transitions (distinct from lifecycle)

@@ -8,7 +8,7 @@
 
 ## 1. correctness — Reducer Rule Contradiction: "Mandatory for Parallel Nodes" vs Last-Write-Wins Default
 
-**Affected:** `routing-execution-layer-design.md` §1.2, §1.3
+**Affected:** `06-routing-execution-layer-design.md` §1.2, §1.3
 
 §1.3 states: *"When a workflow defines parallel nodes, a reducer MUST be declared for every agentState field that any parallel node writes to. This is not optional."*
 
@@ -26,7 +26,7 @@ The mandatory reducer requirement is **at the wrong abstraction level**. The rul
 
 ## 2. correctness — `errorNode` Category Enum Mismatch
 
-**Affected:** `routing-execution-layer-design.md` §6.4 vs `a2a-protocol.md` §2.2
+**Affected:** `06-routing-execution-layer-design.md` §6.4 vs `12-a2a-protocol.md` §2.2
 
 §6.4 defines 7 error categories:
 ```
@@ -48,7 +48,7 @@ While it's defensible that A2A agents may not expose `unrecoverable_error` exter
 
 ## 3. completeness — Missing Conversation-Level Retry Budget
 
-**Affected:** `routing-execution-layer-design.md` §6; Open Question 3
+**Affected:** `06-routing-execution-layer-design.md` §6; Open Question 3
 
 The spec defines per-node retry budgets (§6.2) and a global `max_total_errors: 5` (§6.8) but **no conversation-level retry budget**. Open Question 3 asks: "Should retry budgets be cumulative or per-node?"
 
@@ -65,7 +65,7 @@ Industry practice (AWS Step Functions, Temporal) uses **both** per-activity and 
 
 ## 4. completeness — Missing LLM Provider Failover Strategy
 
-**Affected:** `tool-ecosystem.md` §10; `response-generation-layer-design.md` §3
+**Affected:** `13-tool-ecosystem.md` §10; `08-response-generation-layer-design.md` §3
 
 §10 defines 4 LLM providers (OpenAI, Anthropic, Ollama, Azure) but the spec never defines a **failover strategy**. What happens when:
 - OpenAI returns a 5xx error during extraction?
@@ -84,7 +84,7 @@ This is a critical gap for fintech/regulated industries. The `retry_budget` hand
 
 ## 5. completeness — Static Agent Discovery Lacks Health Checks
 
-**Affected:** `a2a-protocol.md` §4.3
+**Affected:** `12-a2a-protocol.md` §4.3
 
 Static discovery (§4.3) lists agent endpoints with no health check mechanism:
 ```yaml
@@ -107,7 +107,7 @@ This is ~60-90 seconds of wasted latency. The dynamic discovery mode has `health
 
 ## 6. clarity — "Phase Return Stack" vs "Sub-Workflow Phase Stack" Ambiguity
 
-**Affected:** `routing-execution-layer-design.md` §4.2, §5.5
+**Affected:** `06-routing-execution-layer-design.md` §4.2, §5.5
 
 §4.2 defines `phase_stack` for mid-flow detours (push current phase → handle question → pop → resume). §5.5 states: *"Each level has its own isolated state, phase stack, and retry budgets."*
 
@@ -127,7 +127,7 @@ If a sub-workflow encounters a mid-flow question and detours to a sub-sub-workfl
 
 ## 7. clarity — "Goal Checker Runs in Parallel with Response Generation" vs Streaming Blocking
 
-**Affected:** `response-generation-layer-design.md` §4.1, §6.1
+**Affected:** `08-response-generation-layer-design.md` §4.1, §6.1
 
 §4.1: *"At workflow end, an LLM node runs in parallel with response generation to verify whether the workflow actually achieved its goal."*
 
@@ -149,7 +149,7 @@ If the spec intends **optimistic delivery** (send response immediately, append/c
 
 ## 8. consistency — `tool_allowlist` in Routing vs `allowed_tools` in Permission Node Schema Use Different Names
 
-**Affected:** `routing-execution-layer-design.md` §7.2 vs `tool-ecosystem.md` §7.5
+**Affected:** `06-routing-execution-layer-design.md` §7.2 vs `13-tool-ecosystem.md` §7.5
 
 The Routing & Execution spec (§7.2) uses `allowed_tools` in the `NodePermission` schema. The A2A tool section (§7.5.4) uses `tool_allowlist` in node YAML:
 
@@ -203,7 +203,7 @@ The mix of `errorNode` and `error_node` in YAML keys within the same file (e.g.,
 
 ## 10. consistency — A2A Tool Contract Duplicated Across Two Specs
 
-**Affected:** `tool-ecosystem.md` §7.5.2 vs `a2a-protocol.md` §2.2
+**Affected:** `13-tool-ecosystem.md` §7.5.2 vs `12-a2a-protocol.md` §2.2
 
 The A2A tool contract is defined in **two places** with slightly different schemas:
 
@@ -244,7 +244,7 @@ This is intentional (tool contract = configuration; A2A request = wire format), 
 
 ## 11. trade_off_gap — Deterministic vs LLM Decision Trade-off Not Quantified
 
-**Affected:** `routing-execution-layer-design.md` §3.5
+**Affected:** `06-routing-execution-layer-design.md` §3.5
 
 The decision comparison matrix (§3.5) compares Option A (Rule Engine) and Option C (Strict) but **omits Option B (Rule Engine + LLM Fallback)** — which is the most interesting case. Option B is deferred "for future discussion" (§3.2) but the trade-off is precisely what the spec should address:
 
@@ -264,7 +264,7 @@ Without quantifying the trade-off, the spec cannot guide when Option B is approp
 
 ## 12. trade_off_gap — Copy-on-Write Overhead vs Lock Contention Not Benchmarked
 
-**Affected:** `routing-execution-layer-design.md` §1.2
+**Affected:** `06-routing-execution-layer-design.md` §1.2
 
 §1.2 claims: *"Copy overhead per node (nanoseconds for small state)"* — but this is asserted without evidence or qualification.
 
@@ -284,7 +284,7 @@ The alternative (shared mutable state + lock) was dismissed because "race condit
 
 ## 13. missing_edge_case — Sub-Workflow Deadlock via Nested Sync Invocation
 
-**Affected:** `routing-execution-layer-design.md` §5.4, §5.5
+**Affected:** `06-routing-execution-layer-design.md` §5.4, §5.5
 
 Sub-workflows can recursively nest (§5.5): `rag_faq` → `translate_query` → further sub-workflows. With sync invocation (§5.4), the parent blocks waiting for the child.
 
@@ -303,7 +303,7 @@ Similarly, the A2A protocol (§6.1 step 5a: "Framework sends A2A request, blocks
 
 ## 14. missing_edge_case — Goal Checker Runs After User Abandonment
 
-**Affected:** `response-generation-layer-design.md` §4
+**Affected:** `08-response-generation-layer-design.md` §4
 
 The goal checker runs at workflow end. But what if the user **abandons the conversation** mid-workflow? The workflow never reaches its end state. Does the goal checker:
 
@@ -319,7 +319,7 @@ The conversation lifecycle spec (referenced but not part of this review) should 
 
 ## 15. missing_edge_case — PII in LLM Prompts Before Filtering
 
-**Affected:** `response-generation-layer-design.md` §8.3
+**Affected:** `08-response-generation-layer-design.md` §8.3
 
 §8.3 states: *"PII rules are applied before prompt construction. The framework applies this filter to state.collectedFields before injecting entities into any LLM prompt template."*
 
@@ -333,7 +333,7 @@ The spec's PII scope (§8.1) covers `response_text` and `component_data` (output
 
 ## 16. missing_edge_case — `conflict_detect` Reducer Raises Error but No Recovery Path
 
-**Affected:** `routing-execution-layer-design.md` §1.2
+**Affected:** `06-routing-execution-layer-design.md` §1.2
 
 §1.2 defines `strategy: conflict_detect` — *"Raise StateConflictError if same key is written by two sources in the same tick."*
 
@@ -354,7 +354,7 @@ The spec doesn't define what `StateConflictError` does to the workflow. Without 
 
 ## 17. completeness — No SDK Tool Timeout Budget Per Conversation
 
-**Affected:** `tool-ecosystem.md` §7.6; Open Question 12
+**Affected:** `13-tool-ecosystem.md` §7.6; Open Question 12
 
 Open Question 12 asks about cost governance for SDK tools but the spec doesn't address it. SDK tools (OpenCode `do`, Claude `do`) are **the most expensive and slowest tool type**:
 - OpenCode `do` can run for minutes, invoking sub-tools, making multiple LLM calls
@@ -374,7 +374,7 @@ A single `opencode_refactor_module` call could consume 100K+ tokens across its i
 
 ## 18. clarity — "Transition Permission" (§7.7) Enforcement Point Is Undefined
 
-**Affected:** `routing-execution-layer-design.md` §7.7
+**Affected:** `06-routing-execution-layer-design.md` §7.7
 
 §7.7 defines transition enforcement: *"The framework enforces this on every state transition."* But it doesn't specify **when** enforcement occurs:
 

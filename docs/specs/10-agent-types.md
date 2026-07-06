@@ -1,6 +1,6 @@
 # Agent Types — Specialized Execution Agents
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Two agent abstractions that execute tasks after intent classification and state machine routing. Write operations are handled by the deterministic state machine — not by an agent.
 
 ---
@@ -183,7 +183,7 @@ def dispatch_agent(intent: str, intent_defs: dict) -> type[Protocol]:
 
 **Intents without a dedicated agent** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`, `provide_information`, `ambiguous_request`, `out_of_scope`, `unrecognized_intent`, and all write intents like `submit_lead`, `renew_policy`, `update_policy`, `cancel_policy`) are handled directly by the state machine — they are conversation control, slot-filling, or deterministic write operations.
 
-> **Note:** `check_rates` is a **read-only query** (checking rates does not modify any data), so it routes to `ReadOnlyAgent` — NOT the state machine. See [Intent Classification §5.2](./intent-classification-design.md) for the canonical intent → agent routing table. `check_rates` must NOT appear in the "write intents" list above.
+> **Note:** `check_rates` is a **read-only query** (checking rates does not modify any data), so it routes to `ReadOnlyAgent` — NOT the state machine. See [Intent Classification §5.2](./04-intent-classification-design.md) for the canonical intent → agent routing table. `check_rates` must NOT appear in the "write intents" list above.
 
 ---
 
@@ -239,9 +239,9 @@ agents:
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — parent document
-- [Intent Classification Design](./intent-classification-design.md) — intent → agent mapping (§5.2)
-- [RAG Interface](./rag-interface.md) — ReadOnlyAgent's primary backend
-- [State Machine Design](./state-machine-design.md) — agent dispatch and transition orchestration
-- [Tool Ecosystem](./tool-ecosystem.md) — per-agent tool allowlists
-- [LLM Gateway](./llm-gateway.md) — agent LLM calls route through gateway
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent document
+- [Intent Classification Design](./04-intent-classification-design.md) — intent → agent mapping (§5.2)
+- [RAG Interface](./20-rag-interface.md) — ReadOnlyAgent's primary backend
+- [State Machine Design](./03-state-machine-design.md) — agent dispatch and transition orchestration
+- [Tool Ecosystem](./13-tool-ecosystem.md) — per-agent tool allowlists
+- [LLM Gateway](./14-llm-gateway.md) — agent LLM calls route through gateway

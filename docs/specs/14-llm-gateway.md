@@ -1,6 +1,6 @@
 # LLM Gateway — Mandatory Structured Output Interface
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: The single LLM entry point that enforces mandatory structured JSON output for every LLM interaction.
 > **This is the enforcement mechanism for "All LLM output is JSON" (VISION.md §6.3).**
 
@@ -67,7 +67,7 @@ LLMResult {
 }
 ```
 
-The `raw` field is exempt from PII scrubbing (it preserves the original response for debugging/audit). Access to `raw` is restricted to audit trails and debug endpoints with access control. See [Response Generation §8](./response-generation-layer-design.md) for PII scrubbing on `data`.
+The `raw` field is exempt from PII scrubbing (it preserves the original response for debugging/audit). Access to `raw` is restricted to audit trails and debug endpoints with access control. See [Response Generation §8](./08-response-generation-layer-design.md) for PII scrubbing on `data`.
 
 ### 2.3 TokenUsage
 
@@ -1056,7 +1056,7 @@ response_nodes:
 
 ## 8. Integration with errorNode
 
-When the gateway exhausts all tiers and retry attempts and still has an invalid response, it routes to `errorNode`. For the canonical errorNode strategies, see [Routing & Execution §6.6](./routing-execution-layer-design.md).
+When the gateway exhausts all tiers and retry attempts and still has an invalid response, it routes to `errorNode`. For the canonical errorNode strategies, see [Routing & Execution §6.6](./06-routing-execution-layer-design.md).
 
 ```
 LLM Client Gateway (all tiers exhausted)
@@ -1114,8 +1114,8 @@ error_category: JSON_PARSE_ERROR | SCHEMA_MISMATCH | TYPE_COERCION_FAILURE |
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — §4.3 "LLM Output is JSON — Always", §4.1 framework principles
-- [Extraction Layer](./extraction-layer-design.md) — Extract/Validate/Transform pipeline, LLM usage
-- [Routing & Execution](./routing-execution-layer-design.md) — Decision nodes, errorNode, retry budgets
-- [Response Generation](./response-generation-layer-design.md) — Goal setter, goal checker, response generator
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — §4.3 "LLM Output is JSON — Always", §4.1 framework principles
+- [Extraction Layer](./05-extraction-layer-design.md) — Extract/Validate/Transform pipeline, LLM usage
+- [Routing & Execution](./06-routing-execution-layer-design.md) — Decision nodes, errorNode, retry budgets
+- [Response Generation](./08-response-generation-layer-design.md) — Goal setter, goal checker, response generator
 - [VISION.md](../VISION.md) — §6.3 LLM Rules, §6.5 Error Handling

@@ -1,6 +1,6 @@
 # User Authentication & Authorization Token Verification
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: OAuth / OIDC login, token issuance, token verification, user context injection into agentState.
 
 ---
@@ -362,7 +362,7 @@ AuthAuditEntry {
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — §4.4 Permission Model
-- [Routing & Execution](./routing-execution-layer-design.md) — §7 Permission Model details, §1.2 agentState concurrency
-- [Tool Ecosystem](./tool-ecosystem.md) — §6 pycasbin permission engine
-- [Environment Config](./environment-config.md) — per-environment auth settings
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — §4.4 Permission Model
+- [Routing & Execution](./06-routing-execution-layer-design.md) — §7 Permission Model details, §1.2 agentState concurrency
+- [Tool Ecosystem](./13-tool-ecosystem.md) — §6 pycasbin permission engine
+- [Environment Config](./18-environment-config.md) — per-environment auth settings

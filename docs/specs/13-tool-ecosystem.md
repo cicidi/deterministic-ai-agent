@@ -1,6 +1,6 @@
 # Tool Ecosystem Integration
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Visual editor, graph debugger, rule engines, MCP servers, and all third-party tools that integrate with the framework.
 
 ---
@@ -14,7 +14,7 @@
 | 2026-06-17 | 0.3.0 | Section 2.2 LangFlow mapping table: change "Error Handler" → "ErrorNode"; add Section 6 Permission Enforcement (pycasbin) |
 | 2026-06-17 | 0.4.0 | Fix section numbering for §7–§10 sub-sections; change ErrorNode to errorNode (camelCase) in LangFlow mapping table |
 | 2026-06-18 | 0.5.0 | Add `a2a` tool type (§7.5): nodes can call other agents as tools via A2A protocol; add `sdk` tool type (§7.6): nodes can call OpenCode/Claude SDK as tools |
-| 2026-06-18 | 0.5.1 | Deduplicate §9 PII Detection: trim to catalog entry, cross-reference authoritative [Response Generation §8](./response-generation-layer-design.md); sync cross-references with a2a-protocol.md and mcp-api-protocol.md |
+| 2026-06-18 | 0.5.1 | Deduplicate §9 PII Detection: trim to catalog entry, cross-reference authoritative [Response Generation §8](./08-response-generation-layer-design.md); sync cross-references with 12-a2a-protocol.md and 11-mcp-api-protocol.md |
 
 ---
 
@@ -433,9 +433,9 @@ mcp_servers:
 
 ### 7.2 Tool Registration
 
-> **Note:** The canonical `ToolMeta.type` enum (`api | mcp | command | llm | a2a | sdk`) is defined in [HLD §4.4](./deterministic-workflow-framework-design.md). This section adds tool ecosystem-specific detail (registry, defaults, SDK/A2A extensions).
+> **Note:** The canonical `ToolMeta.type` enum (`api | mcp | command | llm | a2a | sdk`) is defined in [HLD §4.4](./01-deterministic-workflow-framework-design.md). This section adds tool ecosystem-specific detail (registry, defaults, SDK/A2A extensions).
 
-Register tools via YAML configuration. Type values follow the [HLD §4.4](./deterministic-workflow-framework-design.md) enum:
+Register tools via YAML configuration. Type values follow the [HLD §4.4](./01-deterministic-workflow-framework-design.md) enum:
 
 ```yaml
 # framework.yaml
@@ -525,7 +525,7 @@ When the framework is used with Claude Desktop, MCP tools are auto-exposed:
 
 ### 7.4 Tool Failure Routing to `errorNode`
 
-When a tool invocation fails (timeout, permission denied, invalid response), the framework routes the execution to a configured `errorNode` instead of crashing the workflow. For the canonical errorNode strategy definitions, see [Routing & Execution §6.6](./routing-execution-layer-design.md).
+When a tool invocation fails (timeout, permission denied, invalid response), the framework routes the execution to a configured `errorNode` instead of crashing the workflow. For the canonical errorNode strategy definitions, see [Routing & Execution §6.6](./06-routing-execution-layer-design.md).
 
 ```yaml
 # framework.yaml
@@ -1100,7 +1100,7 @@ Visualization:
 
 ### 9.1 Role
 
-Microsoft Presidio provides PII detection and anonymization. The **authoritative PII processing design** — including post-generation scrubbing, prompt filtering, audit log redaction, and PII rules in the domain model — is defined in [Response Generation Layer §8 Sensitive Field Handling](./response-generation-layer-design.md).
+Microsoft Presidio provides PII detection and anonymization. The **authoritative PII processing design** — including post-generation scrubbing, prompt filtering, audit log redaction, and PII rules in the domain model — is defined in [Response Generation Layer §8 Sensitive Field Handling](./08-response-generation-layer-design.md).
 
 The tool ecosystem integrates Presidio as the PII detection engine via declarative configuration:
 
@@ -1299,10 +1299,10 @@ export:
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — framework architecture, permission model
-- [Extraction Layer](./extraction-layer-design.md) — rule engine integration in Validate node
-- [Routing & Execution](./routing-execution-layer-design.md) — rule engine in Decision nodes, tool system
-- [Response Generation](./response-generation-layer-design.md) — PII scrubbing, widget rendering
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — framework architecture, permission model
+- [Extraction Layer](./05-extraction-layer-design.md) — rule engine integration in Validate node
+- [Routing & Execution](./06-routing-execution-layer-design.md) — rule engine in Decision nodes, tool system
+- [Response Generation](./08-response-generation-layer-design.md) — PII scrubbing, widget rendering
 - [LangFlow](https://github.com/langflow-ai/langflow) — visual editor (150k stars, MIT)
 - [LangGraph CLI](https://pypi.org/project/langgraph-cli/) — dev server + graph visualization
 - [LangSmith Studio](https://docs.langchain.com/langsmith/studio) — debug + monitor IDE

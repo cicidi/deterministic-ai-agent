@@ -1,7 +1,7 @@
 # Contrarian Review Summary — LLM Gateway Spec
 
 - **Date:** 2026-06-18
-- **Target:** `docs/specs/llm-gateway.md` (v0.3.0 → v0.3.1)
+- **Target:** `docs/specs/14-llm-gateway.md` (v0.3.0 → v0.3.1)
 - **Review Skill:** `ai-coworker-contrarian-review`
 - **Agents:** 4 (Agent 1: Web-Searching Contrarian, Agent 2: MiniMax Cross-Model, Agent 3: Debate Coordinator, Agent 4: Judge)
 

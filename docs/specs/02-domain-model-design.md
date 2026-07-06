@@ -1,6 +1,6 @@
 # Domain Model Specification
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Domain model as the single source of truth for entities, states, and transitions.
 > **This spec defines schemas and interfaces — not a single solution.**
 
@@ -528,7 +528,7 @@ When a new intent arrives mid-conversation, the framework evaluates whether to *
 
 ## 6. Transition Definition
 
-Transitions define valid paths between states. Guards are boolean expressions evaluated against the current entity state. The **authoritative guard expression syntax** is defined in [State Machine Design §3.4](./state-machine-design.md).
+Transitions define valid paths between states. Guards are boolean expressions evaluated against the current entity state. The **authoritative guard expression syntax** is defined in [State Machine Design §3.4](./03-state-machine-design.md).
 
 ### 6.1 TransitionDef Schema
 
@@ -879,7 +879,7 @@ ConversationMessage:
       description: "Widget components rendered in this message"
     masked:
       type: boolean
-      description: "Whether PII was scrubbed before storage. The authoritative PII rules definition is in [Response Generation §8](./response-generation-layer-design.md)."
+      description: "Whether PII was scrubbed before storage. The authoritative PII rules definition is in [Response Generation §8](./08-response-generation-layer-design.md)."
     timestamp:
       type: string
       format: date-time
@@ -993,8 +993,8 @@ transitions:
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — parent architecture document
-- [Extraction Layer Design](./extraction-layer-design.md) — Extract/Validate/Transform interfaces
-- [State Machine Design](./state-machine-design.md) — guard expression base, intent+state resolution
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent architecture document
+- [Extraction Layer Design](./05-extraction-layer-design.md) — Extract/Validate/Transform interfaces
+- [State Machine Design](./03-state-machine-design.md) — guard expression base, intent+state resolution
 - [Mortgage Lead Workflow](../../examples/mortgage-lead/workflow.yaml) — reference domain model instantiation
 - zelkim/langgraph-insurance-chatbot — two-stage dynamic entity selection (auto vs home vs life)

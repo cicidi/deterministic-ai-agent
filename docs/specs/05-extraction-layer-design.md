@@ -1,6 +1,6 @@
 # Extraction Layer Specification
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Entity extraction, validation, and transformation within Layer 1 (UNDERSTAND).
 > **This spec defines interfaces and alternative implementation strategies — not a single solution.**
 
@@ -611,7 +611,7 @@ ValidationRuleSchema {
   custom?:   string                // registered function name
 }
 ```
-> **Note:** Types follow JSON Schema conventions (see [Domain Model §2](./domain-model-design.md)). Validation rules are derived from entity schema properties per AD 29.
+> **Note:** Types follow JSON Schema conventions (see [Domain Model §2](./02-domain-model-design.md)). Validation rules are derived from entity schema properties per AD 29.
 
 ### 6.3 Transform Rule Schema
 
@@ -756,7 +756,7 @@ Layer 2: DECIDE
 
 ### 7.2 Intent → Extraction Routing
 
-1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `submit_lead` routes to `collect_lead_purpose_extract`; `check_rates` routes to `ReadOnlyAgent` (read-only RAG query, no extraction needed — see [Intent Classification §5.2](./intent-classification-design.md) for the canonical routing).
+1. **Intent gates the extraction node**: The state machine uses the primary intent label to select which extraction node to activate. `submit_lead` routes to `collect_lead_purpose_extract`; `check_rates` routes to `ReadOnlyAgent` (read-only RAG query, no extraction needed — see [Intent Classification §5.2](./04-intent-classification-design.md) for the canonical routing).
 
 2. **Intent may skip extraction**: If the intent is `unrecognized_intent` or `ask_question`, extraction skips entirely and routes directly to a clarification or Q&A node.
 
@@ -914,9 +914,9 @@ Periodic exports from `llm_audit` can feed into model fine-tuning pipelines or e
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — parent architecture document
-- [Intent Classification Design](./intent-classification-design.md) — Layer 1 intent classification
-- [State Machine Design](./state-machine-design.md) — state context injection, intent+state resolution
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent architecture document
+- [Intent Classification Design](./04-intent-classification-design.md) — Layer 1 intent classification
+- [State Machine Design](./03-state-machine-design.md) — state context injection, intent+state resolution
 - [Mortgage Lead Workflow](../../examples/mortgage-lead/workflow.yaml) — reference extraction rules
 - zelkim/langgraph-insurance-chatbot — two-phase dynamic schema + LLM-structured-output pattern
 - Prodigal Payment Collection Agent — hybrid LLM + per-slot regex fallback pattern

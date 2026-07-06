@@ -1,6 +1,6 @@
 # Judge Rulings — LLM Gateway Spec Review
 
-> **Target Document:** `docs/specs/llm-gateway.md` (v0.3.0)
+> **Target Document:** `docs/specs/14-llm-gateway.md` (v0.3.0)
 > **Review Type:** Adversarial multi-agent review — Agent 4 (The Judge), final authority, no appeals
 > **Date:** 2026-06-18
 
@@ -38,7 +38,7 @@ Agent 1's quality concern has merit: LLMs *can* produce stilted text when shoeho
 
 ### Implementation
 
-In `docs/specs/llm-gateway.md`:
+In `docs/specs/14-llm-gateway.md`:
 
 **1. Add to §3.1 (Validation Pipeline) or a new §3.6, text preservation guidance:**
 
@@ -116,7 +116,7 @@ The fix must preserve the feature (per vision) while closing these safety gaps.
 
 ### Implementation
 
-In `docs/specs/llm-gateway.md`:
+In `docs/specs/14-llm-gateway.md`:
 
 **1. Update §4.2 deterministic fallback config YAML:**
 
@@ -209,7 +209,7 @@ Replacing `x-threshold` with `minimum` is mechanically safe:
 
 ### Implementation
 
-In `docs/specs/llm-gateway.md`:
+In `docs/specs/14-llm-gateway.md`:
 
 **1. Rewrite §3.5 (Confidence Threshold Gate):**
 

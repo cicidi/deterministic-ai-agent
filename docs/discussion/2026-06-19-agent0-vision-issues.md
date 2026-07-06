@@ -44,12 +44,12 @@
 - **Proposed Fix:** Update VISION.md §3.3 deliverables table: change Python Reference Implementation status from "not yet started" to "mfangdai-agent (MVP built, 64 tests)" and add a cross-reference to HLD Appendix A.5. Or revert HLD v0.10.0 if mfangdai-agent is not yet accepted as the reference implementation.
 - **Severity:** CRITICAL
 
-### ISSUE-4: missing_cross_ref — VISION.md document tree missing `llm-gateway.md`
+### ISSUE-4: missing_cross_ref — VISION.md document tree missing `14-llm-gateway.md`
 
 - **Type:** missing_cross_ref
 - **Documents:** VISION.md:218-240 (document tree), HLD:199, implement-interview/SKILL.md:38
-- **Problem:** Both HLD §5 (line 199) and implement-interview prerequisites (line 38) reference `docs/specs/llm-gateway.md` as a spec document. The file exists on disk. But VISION.md's document tree (lines 218-240) does NOT list `llm-gateway.md`. This means the Vision's own document tree — the "authoritative reference" — is incomplete. implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3`, so the omission cascades.
-- **Proposed Fix:** Add `llm-gateway.md` to VISION.md's document tree at line 238 (alphabetically, between `intent-classification` and `mcp-api-protocol`). Also add `a2a-protocol.md` and `mcp-api-protocol.md`, `auth-token-verification.md`, and `conversation-lifecycle.md` — all are listed in HLD's tree (lines 249-265) but missing from VISION.md's tree.
+- **Problem:** Both HLD §5 (line 199) and implement-interview prerequisites (line 38) reference `docs/specs/14-llm-gateway.md` as a spec document. The file exists on disk. But VISION.md's document tree (lines 218-240) does NOT list `14-llm-gateway.md`. This means the Vision's own document tree — the "authoritative reference" — is incomplete. implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3`, so the omission cascades.
+- **Proposed Fix:** Add `14-llm-gateway.md` to VISION.md's document tree at line 238 (alphabetically, between `intent-classification` and `mcp-api-protocol`). Also add `12-a2a-protocol.md` and `11-mcp-api-protocol.md`, `16-auth-token-verification.md`, and `07-conversation-lifecycle.md` — all are listed in HLD's tree (lines 249-265) but missing from VISION.md's tree.
 - **Severity:** CRITICAL
 
 ### ISSUE-5: vision_violation — mfangdai-agent does not use LangGraph, violating AD1
@@ -112,8 +112,8 @@
 
 - **Type:** missing_cross_ref
 - **Documents:** implement-interview/SKILL.md:148, VISION.md:218-240
-- **Problem:** implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3` for the LLM Gateway strategy default. The file exists (docs/specs/llm-gateway.md), but it is absent from VISION.md's authoritative document tree. A new developer following the Vision tree would have no way to locate this prerequisite.
-- **Proposed Fix:** Same as ISSUE-4 — add `llm-gateway.md` to VISION.md's document tree.
+- **Problem:** implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3` for the LLM Gateway strategy default. The file exists (docs/specs/14-llm-gateway.md), but it is absent from VISION.md's authoritative document tree. A new developer following the Vision tree would have no way to locate this prerequisite.
+- **Proposed Fix:** Same as ISSUE-4 — add `14-llm-gateway.md` to VISION.md's document tree.
 - **Severity:** HIGH
 
 ### ISSUE-12: missing_coverage — mfangdai-agent PRD missing AD14 (goal-driven workflow) and AD19 (node loop-back)
@@ -252,7 +252,7 @@
 
 - **Type:** version_skew
 - **Documents:** implement-interview/SKILL.md:139-151, VISION.md ADs
-- **Problem:** implement-interview's Strategy Defaults table (lines 139-151) pins specific section references: `extraction-layer-design §3.2`, `extraction-layer-design §4`, `routing-execution-layer-design §4`, `routing-execution-layer-design §5`, `routing-execution-layer-design §5.2`, `routing-execution-layer-design §6`, `llm-gateway §3`, `tool-ecosystem §3`. These section numbers will drift as spec documents evolve. There is no mechanism to detect broken cross-references. Already, `llm-gateway §3` (line 148) may not be aligned with the actual llm-gateway.md content.
+- **Problem:** implement-interview's Strategy Defaults table (lines 139-151) pins specific section references: `extraction-layer-design §3.2`, `extraction-layer-design §4`, `routing-execution-layer-design §4`, `routing-execution-layer-design §5`, `routing-execution-layer-design §5.2`, `routing-execution-layer-design §6`, `llm-gateway §3`, `tool-ecosystem §3`. These section numbers will drift as spec documents evolve. There is no mechanism to detect broken cross-references. Already, `llm-gateway §3` (line 148) may not be aligned with the actual 14-llm-gateway.md content.
 - **Proposed Fix:** Add a CI step that validates cross-references in skill files against spec documents. Use fuzzy matching if section numbers change. Or reference concepts by name instead of section number (e.g., "Response: default to pure_message, per response-generation-layer-design").
 - **Severity:** MEDIUM
 
@@ -369,7 +369,7 @@
 
 | Issue | What | Detail |
 |-------|------|--------|
-| ISSUE-4 | llm-gateway.md missing from VISION tree | Referenced by HLD and implement-interview |
+| ISSUE-4 | 14-llm-gateway.md missing from VISION tree | Referenced by HLD and implement-interview |
 | ISSUE-11 | llm-gateway §3 cross-ref from skill | Part of ISSUE-4 cascade |
 | ISSUE-15 | implement-interview doesn't reference auto-tdd | One-way reference |
 | ISSUE-18 | "Appendix B" doesn't exist in HLD | Should be "Appendix A.5" |

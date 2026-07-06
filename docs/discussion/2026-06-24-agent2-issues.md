@@ -429,7 +429,7 @@ The dominant failure mode is **cross-spec contradiction on shared concepts** (In
 ### ISSUE-51: completeness — HLD §8 Document Tree is stale (missing 3 specs + home-insurance example)
 - **Type:** completeness
 - **Section:** HLD §8 (lines 244-270), VISION §9 (complete tree)
-- **Problem:** §8's document tree omits `agent-types.md`, `rag-interface.md`, `three-tier-agent-testing-methodology.md`, and lists only `examples/mortgage-lead/` (not `home-insurance/` or `cicd/`). §5 "Related Design Documents" is complete, so §8 is just stale.
+- **Problem:** §8's document tree omits `10-agent-types.md`, `20-rag-interface.md`, `21-three-tier-agent-testing-methodology.md`, and lists only `examples/mortgage-lead/` (not `home-insurance/` or `cicd/`). §5 "Related Design Documents" is complete, so §8 is just stale.
 - **Proposed Fix:** Sync §8 with VISION §9 (add the 3 missing specs + home-insurance + cicd examples).
 - **Severity:** LOW
 

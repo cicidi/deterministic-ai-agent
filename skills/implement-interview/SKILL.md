@@ -28,17 +28,17 @@ A developer says "I want to build X using this framework" and wants runnable cod
 Load these spec files before interviewing. They are the source of truth for defaults and constraints:
 
 ```
-docs/specs/deterministic-workflow-framework-design.md       (HLD)
-docs/specs/intent-classification-design.md                  (Intent)
-docs/specs/state-machine-design.md                          (State Machine)
-docs/specs/extraction-layer-design.md                       (Extraction)
-docs/specs/domain-model-design.md                           (Domain Model)
-docs/specs/routing-execution-layer-design.md                (Routing & Execution)
-docs/specs/response-generation-layer-design.md              (Response Generation)
-docs/specs/llm-gateway.md                                   (LLM Gateway)
-docs/specs/tool-ecosystem.md                                (Tool Ecosystem)
-docs/specs/environment-config.md                            (Environment Config)
-docs/specs/auth-token-verification.md                       (Auth & Token)
+docs/specs/01-deterministic-workflow-framework-design.md       (HLD)
+docs/specs/04-intent-classification-design.md                  (Intent)
+docs/specs/03-state-machine-design.md                          (State Machine)
+docs/specs/05-extraction-layer-design.md                       (Extraction)
+docs/specs/02-domain-model-design.md                           (Domain Model)
+docs/specs/06-routing-execution-layer-design.md                (Routing & Execution)
+docs/specs/08-response-generation-layer-design.md              (Response Generation)
+docs/specs/14-llm-gateway.md                                   (LLM Gateway)
+docs/specs/13-tool-ecosystem.md                                (Tool Ecosystem)
+docs/specs/18-environment-config.md                            (Environment Config)
+docs/specs/16-auth-token-verification.md                       (Auth & Token)
 ```
 
 Also read `docs/VISION.md` for project vision and constraints.
@@ -288,7 +288,7 @@ After the PRD is approved, generate a runnable Python project.
 
 6. **State Machine.** LangGraph `StateGraph` with nodes, edges, conditional routing. `AgentState` typed with TypedDict. Copy-on-Write + reducer merge semantics. Mermaid state diagram as comment at top of file.
 
-7. **Config YAML.** Domain model MUST follow OpenAPI 3.1 format per domain-model-design.md (AD 29):
+7. **Config YAML.** Domain model MUST follow OpenAPI 3.1 format per 02-domain-model-design.md (AD 29):
 ```yaml
 openapi: "3.1.0"
 info:

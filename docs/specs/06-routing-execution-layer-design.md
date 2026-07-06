@@ -1,6 +1,6 @@
 # Routing & Execution Layer Specification
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Covers: Business logic execution, decision routing, phase-aware routing + return stack, sub-workflow reuse, retry budgets, permission model, tool system.
 > **This spec defines interfaces and alternative implementation strategies — not a single solution.**
 
@@ -406,7 +406,7 @@ agentState = {
     collectedFields: { ... },                   // accumulated entity data
     ...
 }
-// See [Domain Model §10.1](./domain-model-design.md) for the canonical AgentState schema.
+// See [Domain Model §10.1](./02-domain-model-design.md) for the canonical AgentState schema.
 ```
 
 **Flow example:**
@@ -468,7 +468,7 @@ phases:
 
 ### 5.1 Concept
 
-**Sub-workflows are the definition language for A2A (Agent-to-Agent) communication.** They define *what* agents communicate and *how* they coordinate — the inputs, outputs, permissions, and execution contracts between agents. See [A2A Protocol spec](./a2a-protocol.md) for the runtime protocol that sub-workflows execute over (agent discovery, capability negotiation, task lifecycle, message formats).
+**Sub-workflows are the definition language for A2A (Agent-to-Agent) communication.** They define *what* agents communicate and *how* they coordinate — the inputs, outputs, permissions, and execution contracts between agents. See [A2A Protocol spec](./12-a2a-protocol.md) for the runtime protocol that sub-workflows execute over (agent discovery, capability negotiation, task lifecycle, message formats).
 
 Sub-workflows are **complete, standalone workflows** with the same structure as the super workflow — their own domain model (entities, states, transitions), permission model, retry budgets, and routing. Shared capabilities (RAG FAQ, lead verification, lead distribution) are defined once and invoked from any state in any parent workflow.
 
@@ -1058,7 +1058,7 @@ permission:
 
 ### 7.3 Tool Classification
 
-> **Note:** The canonical `ToolMeta.type` enum (`api | mcp | command | llm | a2a | sdk`) is defined in [HLD §4.4](./deterministic-workflow-framework-design.md). This section extends it with routing-specific detail.
+> **Note:** The canonical `ToolMeta.type` enum (`api | mcp | command | llm | a2a | sdk`) is defined in [HLD §4.4](./01-deterministic-workflow-framework-design.md). This section extends it with routing-specific detail.
 
 Every tool (API, MCP server, command, LLM call) has metadata:
 
@@ -1096,7 +1096,7 @@ tools:
 
 ### 7.4 Tool Interface
 
-Every tool conforms to a standard contract (defined in [HLD §4.4](./deterministic-workflow-framework-design.md)). The framework checks permissions before invoking the tool's execution function.
+Every tool conforms to a standard contract (defined in [HLD §4.4](./01-deterministic-workflow-framework-design.md)). The framework checks permissions before invoking the tool's execution function.
 
 ```yaml
 # Tool contract (interface) — type enum: see HLD §4.4
@@ -1188,10 +1188,10 @@ transition_enforcement:
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — parent architecture, framework principles, permission model overview
-- [State Machine Design](./state-machine-design.md) — transition mechanics, state metadata, guard expressions
-- [Domain Model Design](./domain-model-design.md) — entity/state/transition schema
-- [Extraction Layer Design](./extraction-layer-design.md) — Extract/Validate/Transform interfaces
-- [A2A Protocol](./a2a-protocol.md) — Agent-to-Agent runtime protocol (discovery, negotiation, task lifecycle, message formats)
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent architecture, framework principles, permission model overview
+- [State Machine Design](./03-state-machine-design.md) — transition mechanics, state metadata, guard expressions
+- [Domain Model Design](./02-domain-model-design.md) — entity/state/transition schema
+- [Extraction Layer Design](./05-extraction-layer-design.md) — Extract/Validate/Transform interfaces
+- [A2A Protocol](./12-a2a-protocol.md) — Agent-to-Agent runtime protocol (discovery, negotiation, task lifecycle, message formats)
 - zelkim/langgraph-insurance-chatbot — phase-aware routing pattern, sub-workflow anti-pattern
 - Prodigal Payment Collection Agent — per-phase retry budgets, tool execution pattern

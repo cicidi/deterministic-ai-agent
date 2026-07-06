@@ -1,6 +1,6 @@
 # Layer 1: Intent Classification
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
 > Focused on: Intent classification within the UNDERSTAND layer.
 > All concrete intent examples have been extracted to [examples/mortgage-lead/](../../examples/mortgage-lead/).
 
@@ -420,7 +420,7 @@ Multi-intent detection is now implemented. The classifier returns a list of `Cla
 
 ### 5.2 Intent → Extraction Payload Mapping
 
-Each intent is mapped to a typed extraction payload consumed by the Extract node (see [Extraction Layer Spec](./extraction-layer-design.md)):
+Each intent is mapped to a typed extraction payload consumed by the Extract node (see [Extraction Layer Spec](./05-extraction-layer-design.md)):
 
 #### System Intents
 
@@ -497,5 +497,5 @@ In long-running conversations (e.g., 20+ turns), user intent may shift gradually
 
 ## References
 
-- [High-Level Design](./deterministic-workflow-framework-design.md) — parent document
-- [State Machine Design](./state-machine-design.md) — intent+state resolution logic
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent document
+- [State Machine Design](./03-state-machine-design.md) — intent+state resolution logic

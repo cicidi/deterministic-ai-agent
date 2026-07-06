@@ -290,27 +290,27 @@ This philosophical positioning has a direct consequence for MCP integration: the
 
 ```
 docs/specs/
-├── deterministic-workflow-framework-design.md    ← HLD (root)
-├── intent-classification-design.md               ← child of HLD
-├── state-machine-design.md                       ← child of HLD
-├── extraction-layer-design.md                    ← child of HLD
-├── domain-model-design.md                        ← child of HLD
-├── routing-execution-layer-design.md             ← child of HLD
-├── response-generation-layer-design.md           ← child of HLD
-├── tool-ecosystem.md                             ← child of HLD
-├── a2a-protocol.md                               ← child of HLD
-├── mcp-api-protocol.md                           ← child of HLD
-├── environment-config.md                         ← child of HLD
-├── auth-token-verification.md                    ← child of HLD
-├── conversation-lifecycle.md                     ← child of HLD
-├── observability-monitoring.md                   ← child of HLD
-├── cicd-jenkins-pipeline.md                      ← child of HLD
-├── llm-gateway.md                                ← child of HLD
-├── rate-limiting.md                              ← child of HLD
-├── widget-templates.md                           ← child of HLD
-├── rag-interface.md                           ← child of HLD
-├── agent-types.md                             ← child of HLD
-└── three-tier-agent-testing-methodology.md     ← child of HLD
+├── 01-deterministic-workflow-framework-design.md    ← HLD (root)
+├── 04-intent-classification-design.md               ← child of HLD
+├── 03-state-machine-design.md                       ← child of HLD
+├── 05-extraction-layer-design.md                    ← child of HLD
+├── 02-domain-model-design.md                        ← child of HLD
+├── 06-routing-execution-layer-design.md             ← child of HLD
+├── 08-response-generation-layer-design.md           ← child of HLD
+├── 13-tool-ecosystem.md                             ← child of HLD
+├── 12-a2a-protocol.md                               ← child of HLD
+├── 11-mcp-api-protocol.md                           ← child of HLD
+├── 18-environment-config.md                         ← child of HLD
+├── 16-auth-token-verification.md                    ← child of HLD
+├── 07-conversation-lifecycle.md                     ← child of HLD
+├── 15-observability-monitoring.md                   ← child of HLD
+├── 19-cicd-jenkins-pipeline.md                      ← child of HLD
+├── 14-llm-gateway.md                                ← child of HLD
+├── 17-rate-limiting.md                              ← child of HLD
+├── 09-widget-templates.md                           ← child of HLD
+├── 20-rag-interface.md                           ← child of HLD
+├── 10-agent-types.md                             ← child of HLD
+└── 21-three-tier-agent-testing-methodology.md     ← child of HLD
 
 docs/examples/home-insurance/
 ├── README.md

@@ -34,4 +34,4 @@ See `../../domain-models/mortgage-lead.yaml` — OpenAPI 3.1 schemas for:
 
 ## Auth Configuration
 
-OAuth config extracted from mfangdai production system (Keycloak `mRateQuote` realm). See `docs/specs/auth-token-verification.md` §2.5 for the full Keycloak configuration sample.
+OAuth config extracted from mfangdai production system (Keycloak `mRateQuote` realm). See `docs/specs/16-auth-token-verification.md` §2.5 for the full Keycloak configuration sample.
