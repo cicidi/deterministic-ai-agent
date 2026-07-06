@@ -4,6 +4,9 @@ other-projects/
 ._.idea
 .worktrees/
 docs/specs/zh/
+.claude/
+.opencode/
+.DS_Store
 
 # Project-specific
 examples/mfangdai-agent/.venv/
