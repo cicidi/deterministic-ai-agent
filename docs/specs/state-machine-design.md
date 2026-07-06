@@ -1,6 +1,6 @@
 # State Machine Layer Design — YAML + LangGraph Runtime
 
-> See also: [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) for overall architecture and non-FSM concerns.
+> See also: [High-Level Design](./deterministic-workflow-framework-design.md) for overall architecture and non-FSM concerns.
 > All concrete workflow examples have been extracted to [examples/mortgage-lead/](../../examples/mortgage-lead/).
 
 ## Changelog
@@ -320,7 +320,7 @@ Each state can carry 5 types of metadata, enforced at different points in the st
 
 > **Note on static verification:** The "static analysis" and "verification tool" referenced above refers to a planned YAML linter and test generator (design TBD) that reads preconditions, postconditions, and invariants to catch contract violations before deployment. This tooling is out of scope for the current design document; see Appendix C.7 for related open questions.
 >
-> **Note on errorNode:** errorNode provides unified error handling, defined in [Routing & Execution §6.8](./2026-06-17-routing-execution-layer-design.md).
+> **Note on errorNode:** errorNode provides unified error handling, defined in [Routing & Execution §6.8](./routing-execution-layer-design.md).
 
 ### 3.2 Example Patterns
 
@@ -684,16 +684,16 @@ For concrete intent+state resolution examples within home insurance workflows, s
 - [python-statemachine](https://github.com/fgmacedo/python-statemachine) — alternative Python statechart library (informative; not used as runtime)
 - [W3C SCXML 1.0](https://www.w3.org/TR/scxml/) — informative reference for SCXML interchange mapping (see §1.0); not adopted as semantic standard
 - [XState v5](https://stately.ai/docs/xstate) — TypeScript statechart standard (informative; confirms industry moved from SCXML to JSON-based statecharts)
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
-- [Domain Model](./2026-06-17-domain-model-design.md)
-- [Routing & Execution](./2026-06-17-routing-execution-layer-design.md)
-- [Extraction Layer](./2026-06-17-extraction-layer-design.md)
-- [Intent Classification](./2026-06-16-intent-classification-design.md)
+- [High-Level Design](./deterministic-workflow-framework-design.md)
+- [Domain Model](./domain-model-design.md)
+- [Routing & Execution](./routing-execution-layer-design.md)
+- [Extraction Layer](./extraction-layer-design.md)
+- [Intent Classification](./intent-classification-design.md)
 
 ## Appendix C: Implementation Planning — Open Questions (State Machine)
 
 > Questions identified during design but deferred for implementation planning.
-> For non-FSM questions, see [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) Appendix.
+> For non-FSM questions, see [High-Level Design](./deterministic-workflow-framework-design.md) Appendix.
 
 ### C.1 State Design
 

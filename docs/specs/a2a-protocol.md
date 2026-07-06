@@ -1,6 +1,6 @@
 # A2A (Agent-to-Agent) Protocol
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
 > Covers: How sub-workflows become agent-to-agent communication — A2A message format, discovery, sync/async semantics, relationship with MCP, and the A2A runtime protocol.
 
 ---
@@ -10,7 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial A2A protocol spec: message format, discovery, sync/async, MCP comparison |
-| 2026-06-18 | 0.1.1 | Add cross-reference to [Tool Ecosystem §7.5](./2026-06-17-tool-ecosystem.md) for `type: a2a` tool integration (A2A agents as node-level tools with multi-turn conversations); sync with Decision 24 |
+| 2026-06-18 | 0.1.1 | Add cross-reference to [Tool Ecosystem §7.5](./tool-ecosystem.md) for `type: a2a` tool integration (A2A agents as node-level tools with multi-turn conversations); sync with Decision 24 |
 | 2026-06-25 | 0.2.0 | Add §1.3 A2A as Deterministic Microservice Protocol — clarify that A2A is not limited to autonomous LLM agents; when both caller and callee use the deterministic framework, A2A becomes the agent-world equivalent of microservice communication. Add §3.2 A2A vs API vs LangGraph Subgraph comparison — three integration modes with trade-off matrix and decision framework. Align with VISION §6.8 LLM Positioning (deterministic core + LLM as component). |
 
 ---
@@ -55,7 +55,7 @@ This spec defines **A2A as the runtime communication protocol** between agents. 
 - **OAuth / user identity** → Auth Token Verification spec
 - **Response generation** → Response Generation spec
 
-> **New (2026-06-18):** The A2A protocol is also available as a **tool type** (`type: a2a`) — any node can call another agent as one of its `tool_allowlist` tools, with multi-turn conversation support. See [Tool Ecosystem §7.5](./2026-06-17-tool-ecosystem.md) for A2A tool registration, multi-turn A2A conversations, and the A2A-tool-vs-sub-workflow comparison matrix.
+> **New (2026-06-18):** The A2A protocol is also available as a **tool type** (`type: a2a`) — any node can call another agent as one of its `tool_allowlist` tools, with multi-turn conversation support. See [Tool Ecosystem §7.5](./tool-ecosystem.md) for A2A tool registration, multi-turn A2A conversations, and the A2A-tool-vs-sub-workflow comparison matrix.
 
 ### 1.3 A2A as Deterministic Microservice Protocol
 
@@ -471,7 +471,7 @@ a2a:
 
 ## 5. Sync vs Async A2A
 
-The canonical sub-workflow contract (inputs, outputs, timeout, retry budget) is defined in [Routing & Execution §5](./2026-06-17-routing-execution-layer-design.md). This A2A section extends that contract with network-level concerns: agent discovery, protocol negotiation, message serialization, and transport.
+The canonical sub-workflow contract (inputs, outputs, timeout, retry budget) is defined in [Routing & Execution §5](./routing-execution-layer-design.md). This A2A section extends that contract with network-level concerns: agent discovery, protocol negotiation, message serialization, and transport.
 
 ### 5.1 Semantics
 
@@ -590,7 +590,7 @@ agent_registry:
 
 ### 6.3 A2A Error Handling
 
-When an A2A invocation fails, the error routes to `errorNode` following the same pattern as all other errors (Routing & Execution spec §6). A2A errors use the **structured FrameworkError schema** (see [Routing & Execution §6.5](./2026-06-17-routing-execution-layer-design.md)) with **root_cause chain** for cross-agent tracing.
+When an A2A invocation fails, the error routes to `errorNode` following the same pattern as all other errors (Routing & Execution spec §6). A2A errors use the **structured FrameworkError schema** (see [Routing & Execution §6.5](./routing-execution-layer-design.md)) with **root_cause chain** for cross-agent tracing.
 
 #### A2A Error Response with Root-Cause Chain
 
@@ -631,7 +631,7 @@ a2a_response:
 
 #### Root-Cause Chain Rules
 
-The root-cause chain follows the same rules as [Routing & Execution §6.5](./2026-06-17-routing-execution-layer-design.md) (Structured Error Schema). A2A-specific extensions:
+The root-cause chain follows the same rules as [Routing & Execution §6.5](./routing-execution-layer-design.md) (Structured Error Schema). A2A-specific extensions:
 
 1. **If an agent swallows the root_cause, it is a spec violation** — the framework validates that A2A error responses contain the full chain
 
@@ -805,10 +805,10 @@ The A2A protocol complements the existing sub-workflow spec (Routing & Execution
 
 ## References
 
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — framework architecture, permission model
-- [Routing & Execution Layer](./2026-06-17-routing-execution-layer-design.md) — sub-workflow spec (§5), retry (§6), permission (§7)
-- [Tool Ecosystem](./2026-06-17-tool-ecosystem.md) — MCP server integration (§7), tool registration
-- [Auth Token Verification](./2026-06-17-auth-token-verification.md) — UserContext injection
-- [MCP API Protocol](./2026-06-17-mcp-api-protocol.md) — §1.3 Exposure Granularity (coarse-grained `send_message` vs fine-grained tools), §6.8 LLM-as-Component positioning
+- [High-Level Design](./deterministic-workflow-framework-design.md) — framework architecture, permission model
+- [Routing & Execution Layer](./routing-execution-layer-design.md) — sub-workflow spec (§5), retry (§6), permission (§7)
+- [Tool Ecosystem](./tool-ecosystem.md) — MCP server integration (§7), tool registration
+- [Auth Token Verification](./auth-token-verification.md) — UserContext injection
+- [MCP API Protocol](./mcp-api-protocol.md) — §1.3 Exposure Granularity (coarse-grained `send_message` vs fine-grained tools), §6.8 LLM-as-Component positioning
 - [VISION.md §6.8](../VISION.md) — LLM Positioning: Component, Not Orchestrator (deterministic core + LLM as component)
 - [Google A2A Protocol](https://github.com/google/A2A) — Google's Agent-to-Agent protocol (conceptual reference; note: A2A v1.0 donated to Linux Foundation, 150+ organizations)

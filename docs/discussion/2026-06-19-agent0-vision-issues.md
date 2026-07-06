@@ -48,8 +48,8 @@
 
 - **Type:** missing_cross_ref
 - **Documents:** VISION.md:218-240 (document tree), HLD:199, implement-interview/SKILL.md:38
-- **Problem:** Both HLD §5 (line 199) and implement-interview prerequisites (line 38) reference `docs/specs/2026-06-17-llm-gateway.md` as a spec document. The file exists on disk. But VISION.md's document tree (lines 218-240) does NOT list `2026-06-17-llm-gateway.md`. This means the Vision's own document tree — the "authoritative reference" — is incomplete. implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3`, so the omission cascades.
-- **Proposed Fix:** Add `2026-06-17-llm-gateway.md` to VISION.md's document tree at line 238 (alphabetically, between `intent-classification` and `mcp-api-protocol`). Also add `2026-06-17-a2a-protocol.md` and `2026-06-17-mcp-api-protocol.md`, `2026-06-17-auth-token-verification.md`, and `2026-06-17-conversation-lifecycle.md` — all are listed in HLD's tree (lines 249-265) but missing from VISION.md's tree.
+- **Problem:** Both HLD §5 (line 199) and implement-interview prerequisites (line 38) reference `docs/specs/llm-gateway.md` as a spec document. The file exists on disk. But VISION.md's document tree (lines 218-240) does NOT list `llm-gateway.md`. This means the Vision's own document tree — the "authoritative reference" — is incomplete. implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3`, so the omission cascades.
+- **Proposed Fix:** Add `llm-gateway.md` to VISION.md's document tree at line 238 (alphabetically, between `intent-classification` and `mcp-api-protocol`). Also add `a2a-protocol.md` and `mcp-api-protocol.md`, `auth-token-verification.md`, and `conversation-lifecycle.md` — all are listed in HLD's tree (lines 249-265) but missing from VISION.md's tree.
 - **Severity:** CRITICAL
 
 ### ISSUE-5: vision_violation — mfangdai-agent does not use LangGraph, violating AD1
@@ -112,7 +112,7 @@
 
 - **Type:** missing_cross_ref
 - **Documents:** implement-interview/SKILL.md:148, VISION.md:218-240
-- **Problem:** implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3` for the LLM Gateway strategy default. The file exists (docs/specs/2026-06-17-llm-gateway.md), but it is absent from VISION.md's authoritative document tree. A new developer following the Vision tree would have no way to locate this prerequisite.
+- **Problem:** implement-interview's Strategy Defaults table (line 148) references `llm-gateway §3` for the LLM Gateway strategy default. The file exists (docs/specs/llm-gateway.md), but it is absent from VISION.md's authoritative document tree. A new developer following the Vision tree would have no way to locate this prerequisite.
 - **Proposed Fix:** Same as ISSUE-4 — add `llm-gateway.md` to VISION.md's document tree.
 - **Severity:** HIGH
 

@@ -1,6 +1,6 @@
 # Agent 1 (Web-Searching Contrarian) — Adversarial Review of LLM Gateway Spec
 
-**Target:** `docs/specs/2026-06-17-llm-gateway.md`
+**Target:** `docs/specs/llm-gateway.md`
 **Date:** 2026-06-18
 
 ---

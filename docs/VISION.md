@@ -290,27 +290,27 @@ This philosophical positioning has a direct consequence for MCP integration: the
 
 ```
 docs/specs/
-├── 2026-06-16-deterministic-workflow-framework-design.md    ← HLD (root)
-├── 2026-06-16-intent-classification-design.md               ← child of HLD
-├── 2026-06-16-state-machine-design.md                       ← child of HLD
-├── 2026-06-17-extraction-layer-design.md                    ← child of HLD
-├── 2026-06-17-domain-model-design.md                        ← child of HLD
-├── 2026-06-17-routing-execution-layer-design.md             ← child of HLD
-├── 2026-06-17-response-generation-layer-design.md           ← child of HLD
-├── 2026-06-17-tool-ecosystem.md                             ← child of HLD
-├── 2026-06-17-a2a-protocol.md                               ← child of HLD
-├── 2026-06-17-mcp-api-protocol.md                           ← child of HLD
-├── 2026-06-17-environment-config.md                         ← child of HLD
-├── 2026-06-17-auth-token-verification.md                    ← child of HLD
-├── 2026-06-17-conversation-lifecycle.md                     ← child of HLD
-├── 2026-06-17-observability-monitoring.md                   ← child of HLD
-├── 2026-06-17-cicd-jenkins-pipeline.md                      ← child of HLD
-├── 2026-06-17-llm-gateway.md                                ← child of HLD
-├── 2026-06-17-rate-limiting.md                              ← child of HLD
-├── 2026-06-17-widget-templates.md                           ← child of HLD
-├── 2026-06-18-rag-interface.md                           ← child of HLD
-├── 2026-06-18-agent-types.md                             ← child of HLD
-└── 2026-06-19-three-tier-agent-testing-methodology.md     ← child of HLD
+├── deterministic-workflow-framework-design.md    ← HLD (root)
+├── intent-classification-design.md               ← child of HLD
+├── state-machine-design.md                       ← child of HLD
+├── extraction-layer-design.md                    ← child of HLD
+├── domain-model-design.md                        ← child of HLD
+├── routing-execution-layer-design.md             ← child of HLD
+├── response-generation-layer-design.md           ← child of HLD
+├── tool-ecosystem.md                             ← child of HLD
+├── a2a-protocol.md                               ← child of HLD
+├── mcp-api-protocol.md                           ← child of HLD
+├── environment-config.md                         ← child of HLD
+├── auth-token-verification.md                    ← child of HLD
+├── conversation-lifecycle.md                     ← child of HLD
+├── observability-monitoring.md                   ← child of HLD
+├── cicd-jenkins-pipeline.md                      ← child of HLD
+├── llm-gateway.md                                ← child of HLD
+├── rate-limiting.md                              ← child of HLD
+├── widget-templates.md                           ← child of HLD
+├── rag-interface.md                           ← child of HLD
+├── agent-types.md                             ← child of HLD
+└── three-tier-agent-testing-methodology.md     ← child of HLD
 
 docs/examples/home-insurance/
 ├── README.md

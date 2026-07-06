@@ -1,7 +1,7 @@
 # Agent 2 (MiniMax-angle) Review: LLM Gateway Spec — Issues Found
 
 > **Reviewer**: Agent 2 (independent cross-model perspective)
-> **Document**: `docs/specs/2026-06-17-llm-gateway.md` v0.3.0
+> **Document**: `docs/specs/llm-gateway.md` v0.3.0
 > **Date**: 2026-06-18
 
 ---

@@ -1,6 +1,6 @@
 # MCP API Protocol
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
 > Covers: MCP (Model Context Protocol) server interface, tool definitions, provider configuration, MCP vs REST comparison.
 
 ---
@@ -10,7 +10,7 @@
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-17 | 0.1.0 | Initial MCP API protocol spec: server interface, tool definitions, provider config, MCP vs REST comparison |
-| 2026-06-18 | 0.1.1 | Add cross-references to [Tool Ecosystem §7.5](./2026-06-17-tool-ecosystem.md) for `type: a2a` tool type and §7.6 for `type: sdk` tool type; sync with Decision 24 |
+| 2026-06-18 | 0.1.1 | Add cross-references to [Tool Ecosystem §7.5](./tool-ecosystem.md) for `type: a2a` tool type and §7.6 for `type: sdk` tool type; sync with Decision 24 |
 | 2026-06-25 | 0.2.0 | Add §1.3 Exposure Granularity — document the coarse-grained `send_message` design decision and rationale (why internal tools are NOT exposed to external LLM clients); clarify MCP-as-transport vs MCP-as-orchestrator distinction; document A2A-semantic-over-MCP-protocol pattern. Upgrade transport from deprecated HTTP+SSE to Streamable HTTP (MCP spec 2025-11-25); pin protocol version; add backwards compatibility notes. |
 
 ---
@@ -727,11 +727,11 @@ observability:
 
 ## References
 
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — §2 Core Architecture, §4.1 Framework Principles
-- [Auth & Token Verification](./2026-06-17-auth-token-verification.md) — Token verification pipeline (reused for MCP)
-- [Conversation Lifecycle](./2026-06-17-conversation-lifecycle.md) — Lifecycle states, checkpoint integration
-- [Observability & Monitoring](./2026-06-17-observability-monitoring.md) — MCP metrics collection
-- [Tool Ecosystem](./2026-06-17-tool-ecosystem.md) — MCP server integration with existing tool stack
+- [High-Level Design](./deterministic-workflow-framework-design.md) — §2 Core Architecture, §4.1 Framework Principles
+- [Auth & Token Verification](./auth-token-verification.md) — Token verification pipeline (reused for MCP)
+- [Conversation Lifecycle](./conversation-lifecycle.md) — Lifecycle states, checkpoint integration
+- [Observability & Monitoring](./observability-monitoring.md) — MCP metrics collection
+- [Tool Ecosystem](./tool-ecosystem.md) — MCP server integration with existing tool stack
 - [Model Context Protocol Specification (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25) — Official MCP spec (current stable)
 - [MCP Streamable HTTP Transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) — Transport specification (replaces deprecated HTTP+SSE)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) — Reference Python implementation

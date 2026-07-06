@@ -1,6 +1,6 @@
 # Home Insurance — Intent Definitions
 
-> Custom intents for the home insurance domain, extending the [system intents](../../specs/2026-06-16-intent-classification-design.md#21-system-intents-built-in).
+> Custom intents for the home insurance domain, extending the [system intents](../../specs/intent-classification-design.md#21-system-intents-built-in).
 
 ## Custom Intents
 
@@ -95,4 +95,4 @@ intents:
 | `cancel_policy` | `confirm_cancellation` (TBD) | Service |
 | `ask_about_claim_status` | `lookup_claim` (TBD) | Service |
 
-> **Note:** `check_coverage`, `cancel_policy`, and `ask_about_claim_status` are mapped to service sub-workflows not yet defined in the current `workflow.yaml`. See [open questions](../../specs/2026-06-16-state-machine-design.md#appendix-c-implementation-planning--open-questions-state-machine) C.1 for sub-workflow design.
+> **Note:** `check_coverage`, `cancel_policy`, and `ask_about_claim_status` are mapped to service sub-workflows not yet defined in the current `workflow.yaml`. See [open questions](../../specs/state-machine-design.md#appendix-c-implementation-planning--open-questions-state-machine) C.1 for sub-workflow design.

@@ -1,6 +1,6 @@
 # Observability & Monitoring
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
 > Covers: Metrics collection, Grafana dashboards, alert rules, LangSmith integration, Prometheus metrics, audit log data source.
 
 ---
@@ -877,14 +877,14 @@ observability:
 
 ## References
 
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — §4.3 LLM Output is JSON, §4.5 Audit Trail
-- [LLM Gateway](./2026-06-17-llm-gateway.md) — Validation pipeline, retry budget, schema violations
-- [Routing & Execution](./2026-06-17-routing-execution-layer-design.md) — errorNode strategy, retry budgets
-- [Response Generation](./2026-06-17-response-generation-layer-design.md) — goal_check 422 rate, goal setter/checker
-- [Conversation Lifecycle](./2026-06-17-conversation-lifecycle.md) — Lifecycle audit log, state transition metrics
-- [Environment Config](./2026-06-17-environment-config.md) — Per-environment observability settings
-- [Tool Ecosystem](./2026-06-17-tool-ecosystem.md) — LangSmith Studio, LangGraph CLI
-- [CI/CD Pipeline](./2026-06-17-cicd-jenkins-pipeline.md) — Eval metrics tie into observability
+- [High-Level Design](./deterministic-workflow-framework-design.md) — §4.3 LLM Output is JSON, §4.5 Audit Trail
+- [LLM Gateway](./llm-gateway.md) — Validation pipeline, retry budget, schema violations
+- [Routing & Execution](./routing-execution-layer-design.md) — errorNode strategy, retry budgets
+- [Response Generation](./response-generation-layer-design.md) — goal_check 422 rate, goal setter/checker
+- [Conversation Lifecycle](./conversation-lifecycle.md) — Lifecycle audit log, state transition metrics
+- [Environment Config](./environment-config.md) — Per-environment observability settings
+- [Tool Ecosystem](./tool-ecosystem.md) — LangSmith Studio, LangGraph CLI
+- [CI/CD Pipeline](./cicd-jenkins-pipeline.md) — Eval metrics tie into observability
 - [Prometheus Documentation](https://prometheus.io/docs/introduction/overview/)
 - [Grafana Documentation](https://grafana.com/docs/grafana/latest/)
 - [OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/) — CNCF standard for traces/metrics/logs instrumentation

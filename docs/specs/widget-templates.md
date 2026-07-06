@@ -1,6 +1,6 @@
 # Widget Templates
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
 > Covers: Two widget template strategies for response generation — A2A Chatbot Template (open-source) and Claude-Generated Widgets (LLM-generated) — component types, message format, theme configuration, embedding, widget schema, and frontmatter protocol mapping.
 
 ---
@@ -672,8 +672,8 @@ widgets:
 
 ## References
 
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — framework architecture, JSON guardrails
-- [Response Generation Layer](./2026-06-17-response-generation-layer-design.md) — ResponseMessage schema (§3.2), widget mapping (§3.3 Option B), frontmatter protocol (§7), PII scrubbing (§8)
-- [LLM Gateway](./2026-06-17-llm-gateway.md) — LLM call contract (used for Claude generation)
-- [Tool Ecosystem](./2026-06-17-tool-ecosystem.md) — component registration, LangFlow integration
-- [A2A Protocol](./2026-06-17-a2a-protocol.md) — A2A Chatbot Template naming reference
+- [High-Level Design](./deterministic-workflow-framework-design.md) — framework architecture, JSON guardrails
+- [Response Generation Layer](./response-generation-layer-design.md) — ResponseMessage schema (§3.2), widget mapping (§3.3 Option B), frontmatter protocol (§7), PII scrubbing (§8)
+- [LLM Gateway](./llm-gateway.md) — LLM call contract (used for Claude generation)
+- [Tool Ecosystem](./tool-ecosystem.md) — component registration, LangFlow integration
+- [A2A Protocol](./a2a-protocol.md) — A2A Chatbot Template naming reference

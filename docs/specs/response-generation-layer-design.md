@@ -1,6 +1,6 @@
 # Response Generation Layer Specification
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
 > Covers: Goal setting, response generation, goal completion verification, templates, sensitive field handling.
 > **This spec defines interfaces and alternative implementation strategies — not a single solution.**
 
@@ -623,8 +623,8 @@ The framework applies this filter to `state.collectedFields` before injecting en
 
 ## References
 
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — parent architecture, framework principles (JSON guardrails)
-- [Domain Model Design](./2026-06-17-domain-model-design.md) — entity schemas, PII rules in domain model
-- [Routing & Execution Layer Design](./2026-06-17-routing-execution-layer-design.md) — Layer 2 outputs consumed by response generation
+- [High-Level Design](./deterministic-workflow-framework-design.md) — parent architecture, framework principles (JSON guardrails)
+- [Domain Model Design](./domain-model-design.md) — entity schemas, PII rules in domain model
+- [Routing & Execution Layer Design](./routing-execution-layer-design.md) — Layer 2 outputs consumed by response generation
 - zelkim/langgraph-insurance-chatbot — frontmatter component protocol, hybrid template pattern
 - Prodigal Payment Collection Agent — post-API response scrubbing (card data wiped from memory)

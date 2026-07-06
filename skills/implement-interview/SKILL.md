@@ -28,17 +28,17 @@ A developer says "I want to build X using this framework" and wants runnable cod
 Load these spec files before interviewing. They are the source of truth for defaults and constraints:
 
 ```
-docs/specs/2026-06-16-deterministic-workflow-framework-design.md       (HLD)
-docs/specs/2026-06-16-intent-classification-design.md                  (Intent)
-docs/specs/2026-06-16-state-machine-design.md                          (State Machine)
-docs/specs/2026-06-17-extraction-layer-design.md                       (Extraction)
-docs/specs/2026-06-17-domain-model-design.md                           (Domain Model)
-docs/specs/2026-06-17-routing-execution-layer-design.md                (Routing & Execution)
-docs/specs/2026-06-17-response-generation-layer-design.md              (Response Generation)
-docs/specs/2026-06-17-llm-gateway.md                                   (LLM Gateway)
-docs/specs/2026-06-17-tool-ecosystem.md                                (Tool Ecosystem)
-docs/specs/2026-06-17-environment-config.md                            (Environment Config)
-docs/specs/2026-06-17-auth-token-verification.md                       (Auth & Token)
+docs/specs/deterministic-workflow-framework-design.md       (HLD)
+docs/specs/intent-classification-design.md                  (Intent)
+docs/specs/state-machine-design.md                          (State Machine)
+docs/specs/extraction-layer-design.md                       (Extraction)
+docs/specs/domain-model-design.md                           (Domain Model)
+docs/specs/routing-execution-layer-design.md                (Routing & Execution)
+docs/specs/response-generation-layer-design.md              (Response Generation)
+docs/specs/llm-gateway.md                                   (LLM Gateway)
+docs/specs/tool-ecosystem.md                                (Tool Ecosystem)
+docs/specs/environment-config.md                            (Environment Config)
+docs/specs/auth-token-verification.md                       (Auth & Token)
 ```
 
 Also read `docs/VISION.md` for project vision and constraints.
@@ -393,7 +393,7 @@ Next: cd {dir} && pip install -r requirements.txt && python main.py
 
 ## Sources
 
-- Interview flow: confidence high — based on design spec `docs/superpowers/specs/2026-06-18-mvp-interview-skill-design.md`
+- Interview flow: confidence high — based on design spec `docs/superpowers/specs/mvp-interview-skill-design.md`
 - Strategy defaults: confidence high — each default matches the relevant spec document's recommendation
 - Code generation rules: confidence high — derived from framework specs (HLD, State Machine, Extraction, Routing, Response, LLM Gateway)
 - File size enforcement: confidence high — project principle #7 (file ≤1000, method ≤50)

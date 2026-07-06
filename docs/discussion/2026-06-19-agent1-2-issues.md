@@ -49,7 +49,7 @@
 - **File:** N/A (file missing)
 - **Problem:** PRD Section 8 lists "A2A client — Agent-to-agent communication for cross-platform lead sharing" as Next Step #2. GAPS.md references `A2A Protocol` spec 5 times in the Postman gap section. There is zero code implementing A2A message routing, agent discovery, or cross-platform lead sharing. No file `src/a2a_client.py` or equivalent exists.
 - **Impact:** The Postman collection's push-model distribution tests (5.1, 58 test cases) cannot be exercised through the agent. Cross-platform lead sharing is impossible.
-- **Proposed Fix:** Either create the A2A client referencing the `docs/specs/2026-06-17-a2a-protocol.md` spec, or move A2A from "Next Steps" to "Backlog" in PRD.
+- **Proposed Fix:** Either create the A2A client referencing the `docs/specs/a2a-protocol.md` spec, or move A2A from "Next Steps" to "Backlog" in PRD.
 - **Severity:** CRITICAL
 
 ### ISSUE-4: correctness — Duplicate `LeadAssignmentModel` rows created on every `match_officer` call

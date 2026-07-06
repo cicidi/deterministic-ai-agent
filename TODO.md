@@ -35,17 +35,17 @@ Last updated: 2026-06-17
 
 | # | Spec | Version |
 |---|------|---------|
-| 1 | [HLD](docs/specs/2026-06-16-deterministic-workflow-framework-design.md) | v0.7.0 |
-| 2 | [Intent Classification](docs/specs/2026-06-16-intent-classification-design.md) | v0.3.0 |
-| 3 | [State Machine](docs/specs/2026-06-16-state-machine-design.md) | v0.6.0 |
-| 4 | [Extraction Layer](docs/specs/2026-06-17-extraction-layer-design.md) | v0.4.0 |
-| 5 | [Domain Model](docs/specs/2026-06-17-domain-model-design.md) | v0.3.0 |
-| 6 | [Routing & Execution](docs/specs/2026-06-17-routing-execution-layer-design.md) | v0.3.0 |
-| 7 | [Response Generation](docs/specs/2026-06-17-response-generation-layer-design.md) | v0.4.0 |
-| 8 | [LLM Gateway](docs/specs/2026-06-17-llm-gateway.md) | v0.1.0 |
-| 9 | [Tool Ecosystem](docs/specs/2026-06-17-tool-ecosystem.md) | v0.3.0 |
-| 10 | [Environment Config](docs/specs/2026-06-17-environment-config.md) | v0.3.0 |
-| 11 | [Auth & Token Verification](docs/specs/2026-06-17-auth-token-verification.md) | v0.2.0 |
+| 1 | [HLD](docs/specs/deterministic-workflow-framework-design.md) | v0.7.0 |
+| 2 | [Intent Classification](docs/specs/intent-classification-design.md) | v0.3.0 |
+| 3 | [State Machine](docs/specs/state-machine-design.md) | v0.6.0 |
+| 4 | [Extraction Layer](docs/specs/extraction-layer-design.md) | v0.4.0 |
+| 5 | [Domain Model](docs/specs/domain-model-design.md) | v0.3.0 |
+| 6 | [Routing & Execution](docs/specs/routing-execution-layer-design.md) | v0.3.0 |
+| 7 | [Response Generation](docs/specs/response-generation-layer-design.md) | v0.4.0 |
+| 8 | [LLM Gateway](docs/specs/llm-gateway.md) | v0.1.0 |
+| 9 | [Tool Ecosystem](docs/specs/tool-ecosystem.md) | v0.3.0 |
+| 10 | [Environment Config](docs/specs/environment-config.md) | v0.3.0 |
+| 11 | [Auth & Token Verification](docs/specs/auth-token-verification.md) | v0.2.0 |
 
 ## Spec Documents — Planned
 

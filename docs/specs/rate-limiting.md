@@ -1,6 +1,6 @@
 # Rate Limiting
 
-> Part of [Deterministic Workflow Framework — High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md)
+> Part of [Deterministic Workflow Framework — High-Level Design](./deterministic-workflow-framework-design.md)
 > Covers: Rate limiting strategy across three dimensions (user, tenant, tool), limit tiers, YAML configuration, 429 response format, and implement-interview integration.
 
 ---
@@ -554,10 +554,10 @@ rate_limiting:
 
 ## References
 
-- [High-Level Design](./2026-06-16-deterministic-workflow-framework-design.md) — framework architecture
-- [Auth Token Verification](./2026-06-17-auth-token-verification.md) — UserContext schema (§2.3), tenant_id
-- [LLM Gateway](./2026-06-17-llm-gateway.md) — LLM call contract; model escalation impacts per-provider rate limits
-- [Tool Ecosystem](./2026-06-17-tool-ecosystem.md) — tool registration and classification
-- [Routing & Execution Layer](./2026-06-17-routing-execution-layer-design.md) — retry budgets (§6), permission model (§7)
-- [A2A Protocol](./2026-06-17-a2a-protocol.md) — multi-agent rate limit propagation (future concern)
-- [Response Generation](./2026-06-17-response-generation-layer-design.md) — 422 error format (comparable pattern)
+- [High-Level Design](./deterministic-workflow-framework-design.md) — framework architecture
+- [Auth Token Verification](./auth-token-verification.md) — UserContext schema (§2.3), tenant_id
+- [LLM Gateway](./llm-gateway.md) — LLM call contract; model escalation impacts per-provider rate limits
+- [Tool Ecosystem](./tool-ecosystem.md) — tool registration and classification
+- [Routing & Execution Layer](./routing-execution-layer-design.md) — retry budgets (§6), permission model (§7)
+- [A2A Protocol](./a2a-protocol.md) — multi-agent rate limit propagation (future concern)
+- [Response Generation](./response-generation-layer-design.md) — 422 error format (comparable pattern)
