@@ -484,12 +484,15 @@ Complex computation still belongs in action functions. Simple field assignments 
 
 ### 3.6 Runtime State Tracking Fields
 
-Beyond the declarative `collected_fields`, the agentState carries runtime fields that enable context-aware classification and extraction. These fields are set by the state machine (not YAML) during question-asking transitions.
+Beyond the declarative `collected_fields`, the agentState carries runtime fields that enable focused extraction. These fields are set by the state machine (not YAML) during question-asking transitions.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `current_collecting_field` | `string` | Which field the agent is currently asking about (e.g., `"home_value"`, `"state"`). Set when the agent asks a question; cleared when the field is collected. |
-| `last_agent_question` | `string` | The exact text of the last question the agent asked. Used for transparency and debugging. |
+| `current_collecting_fields` | `string[]` | The **focused extraction group** — the list of fields the agent is currently collecting (e.g., `["home_value", "loan_amount"]`). Used by the extraction layer to narrow the search space: first try this small group, fall back to the full schema only if extraction fails. Set when the agent enters a collecting state; cleared when all fields in the group are collected. |
+
+> **Why an array, not a single string:** A collecting state often targets a group of related fields (e.g., `home_value` + `loan_amount` are both financial amounts). The extraction layer iterates through this group and maps a bare user answer like "800,000" to the first field that parses successfully.
+
+> **Why no `last_agent_question` field:** The classify prompt already injects the last N turns of raw chat history (see [Intent Classification §3.1](./04-intent-classification-design.md#31-conversation-context)). The LLM reads the actual dialog to understand what was just asked — storing it as a separate state field is redundant.
 
 **Lifecycle:**
 
@@ -497,23 +500,22 @@ Beyond the declarative `collected_fields`, the agentState carries runtime fields
 State: collect_home_value
   on_entry:
     set_field:
-      current_collecting_field: "home_value"
-      last_agent_question: "What is the estimated value of the property?"
+      current_collecting_fields: ["home_value", "loan_amount"]
   │
   ├─ User answers "800,000"
-  │   → extraction uses current_collecting_field for focused group lookup
-  │   → classify prompt includes last_agent_question in chat history
+  │   → extraction iterates ["home_value", "loan_amount"]
+  │   → _try_focused_extract("800,000", "home_value") succeeds → assign home_value=800000
+  │   → break (one bare answer = one field)
   │
   ├─ Transition to collect_loan_amount
   │   on_entry:
   │     set_field:
-  │       current_collecting_field: "loan_amount"
-  │       last_agent_question: "How much are you looking to borrow?"
+  │       current_collecting_fields: ["loan_amount"]
   │
   └─ ...continues through all collecting states...
 ```
 
-**Response metadata:** When the agent's response reaches the API layer, `current_collecting_field` is included as `current_field` in the response payload:
+**Response metadata:** When the agent's response reaches the API layer, the first element is included as `current_field` in the response payload:
 
 ```json
 {
@@ -819,3 +821,4 @@ For concrete intent+state resolution examples within home insurance workflows, s
 |------|--------|
 | 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
 | 2026-07-17 | Added Section 3.6: Runtime State Tracking Fields — `current_collecting_field` and `last_agent_question` lifecycle, response metadata with `current_field`, frontend field-aware UI pattern |
+| 2026-07-17 | §3.6 revised: `current_collecting_field` → `current_collecting_fields` (array — the focused extraction group); removed `last_agent_question` (redundant — classify prompt already injects raw chat history) |
