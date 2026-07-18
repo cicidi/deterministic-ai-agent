@@ -200,7 +200,7 @@ Pass 2: Merge & Resolve
   Confirmation (LLM 2-only fields):
     Fields found ONLY by LLM 2 (not in LLM 1 output) require user confirmation:
       "I noticed you mentioned your phone is 647-555-1234 earlier. Is that correct?"
-    → user confirms → framework merges into collectedFields
+    → user confirms → framework merges into collected_fields
     → user corrects → framework re-extracts with correction
   
   Fields found ONLY by LLM 1 (not in LLM 2 output) are accepted directly
@@ -223,6 +223,91 @@ Pass 2: Merge & Resolve
 | LLM 2-only fields require user confirmation | Fields found out-of-context may be misattributed — verify with user |
 
 Thus the Extract node is not a single LLM call — it is a **parallel two-LLM orchestration** driven by the per-state scope defined in the domain model's `x-state-bindings`, followed by a merge-resolve-and-confirm step.
+
+### 2.6 Focused Extraction Groups & Bare-Number Fallback
+
+When the agent is collecting a specific field (e.g., `home_value`), the user often answers with just a bare value — "800,000" or "CA". Without context, the LLM may not know which field this maps to. The focused extraction pattern solves this.
+
+#### Extraction Groups
+
+Each `agentState.current_collecting_field` maps to a small **focused group** of related fields. Extraction first tries this narrow group, then expands to the full schema only if needed.
+
+| Current Field | Focused Group |
+|---------------|---------------|
+| `home_value` | `["home_value", "loan_amount"]` |
+| `loan_amount` | `["loan_amount", "home_value"]` |
+| `state` | `["state", "zip_code"]` |
+| `first_name` | `["first_name", "last_name"]` |
+| `credit_score_range` | `["credit_score_range"]` |
+| (unknown) | Full `CORE_FIELDS` |
+
+#### Three-Tier Extraction Fallback
+
+```
+Tier 1: LLM entities from classify prompt (has full chat history)
+   │
+   ├─ Success → done
+   │
+   └─ No entities extracted
+        │
+        ▼
+Tier 2: _try_focused_extract(current_field, user_message)
+   │  • Numeric fields: strip $ and ,, parse k/m suffixes, try float()
+   │  • State fields: normalize 2-letter codes and full names
+   │  • Enum fields: match against known values
+   │
+   ├─ Success → assign to current_collecting_field → done
+   │
+   └─ Not parseable as current field type
+        │
+        ▼
+Tier 3: _deterministic_extract(user_message) — regex patterns
+   • Context-aware: "my house is worth 800k", "borrowing 400,000"
+   • Bare-number: standalone "$800,000" → home_value
+   • State codes, credit scores, loan purpose keywords
+```
+
+#### Bare-Number Loop Prevention
+
+A known failure mode: user types "800,000" → LLM sees no context → classifies `unrecognized_intent` → agent asks again → infinite loop.
+
+**Triple-layer defense:**
+
+| Layer | Mechanism | File |
+|-------|-----------|------|
+| **Prompt context** | Raw chat history shows the LLM exactly what was just asked | `classify.py` |
+| **Focused extract** | `_try_focused_extract()` maps bare number to `current_collecting_field` | `extract.py` |
+| **Validation** | Strip `$`, `,` before `float()` — handles `float("800,000")` without ValueError | `extract.py` |
+
+#### Number Parsing
+
+All numeric value parsing strips formatting before `float()`:
+- `$` (dollar signs)
+- `,` (commas)
+- ` ` (spaces)
+- `k`/`K` suffix → ×1000
+- `m`/`M` suffix → ×1,000,000
+
+This handles real-world user inputs like `$800,000`, `500k`, `1.2M` without requiring the LLM to do numeric formatting.
+
+### 2.7 Current Field Metadata
+
+When the agent asks a question, the response includes `current_field` metadata:
+
+```json
+{
+  "response": "What is the estimated value of the property?",
+  "phase": "collecting_info",
+  "current_field": "home_value"
+}
+```
+
+This enables the frontend to:
+- Show field-specific input hints (e.g., currency input for numeric fields)
+- Validate client-side before sending
+- Display progress ("Step 2 of 5")
+
+The `current_field` is tracked in `agentState.current_collecting_field` and updated on each state transition that asks a new question.
 
 ---
 
@@ -823,7 +908,7 @@ User provides information for fields the current node does not request. Extract 
 
 ### 9.3 Field Value Correction Mid-Workflow
 
-User corrects a previously filled field ("Wait, the address is not X, it's Y"). Conversation context in Extract captures the new value. The accumulated `collectedFields` is overwritten.
+User corrects a previously filled field ("Wait, the address is not X, it's Y"). Conversation context in Extract captures the new value. The accumulated `collected_fields` is overwritten.
 
 ### 9.4 Ambiguous Values
 
@@ -920,3 +1005,16 @@ Periodic exports from `llm_audit` can feed into model fine-tuning pipelines or e
 - [Mortgage Lead Workflow](../../examples/mortgage-lead/workflow.yaml) — reference extraction rules
 - zelkim/langgraph-insurance-chatbot — two-phase dynamic schema + LLM-structured-output pattern
 - Prodigal Payment Collection Agent — hybrid LLM + per-slot regex fallback pattern
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+| 2026-07-17 | Added Section 2.6: Focused Extraction Groups & Bare-Number Fallback — extraction group mapping table, three-tier extraction fallback (LLM → focused → regex), bare-number loop prevention (triple-layer defense), number parsing ($/comma/k/m handling). Added Section 2.7: Current Field Metadata — `current_field` in response payload for frontend awareness |

@@ -293,7 +293,45 @@ The full classification flow is specified in §3.
 
 Intent classification is not a single-message operation. The LLM prompt must include conversation history to resolve ambiguous utterances. For example, "yes" means `confirm` if the agent just asked "should I proceed?" but means `provide_information` if the agent asked "is your phone number 555-0123?" (confirming extracted data). Without context, a one-word reply like "yes" to "what's your name?" is `unrecognized_intent` — it makes no semantic sense.
 
-The framework includes the **last 3 user messages + last 3 agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
+The framework includes the **last N user messages + last N agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
+
+**Context depth is configurable** via `CLASSIFY_HISTORY_TURNS` (default: 3). More turns = more accuracy for complex multi-turn flows. Shorter = faster/cheaper for simple flows.
+
+```bash
+export CLASSIFY_HISTORY_TURNS=3   # default; increase for higher accuracy
+```
+
+#### Raw Chat History Format
+
+The conversation context is injected as **raw dialog** — not a synthesized summary. The LLM sees the actual conversation text:
+
+```
+--- Recent conversation ---
+Agent: Are you buying (purchase) or refinancing?
+User: purchase
+Agent: What is the estimated value of the property?
+
+Current user message: "800,000"
+```
+
+This format is superior to synthesized metadata (e.g., "the agent JUST asked about home_value") because:
+
+| Approach | Accuracy | Information Loss | LLM Understanding |
+|----------|----------|------------------|-------------------|
+| Raw chat history | High | None — LLM reads the actual dialog | Natural language understanding |
+| Synthesized summary | Medium | Summary loses nuance, timing, exact phrasing | Must trust the summary author |
+
+#### Implementation: `_build_chat_history()`
+
+The function extracts the last N user/assistant pairs from `state.messages`:
+
+```
+function _build_chat_history(messages, turns=CLASSIFY_HISTORY_TURNS):
+    filter messages to roles in (user, assistant)
+    take last (turns * 2) messages
+    format each as "Role: content" (truncate >200 chars)
+    return joined string, or "(no prior messages)" if empty
+```
 
 > **Note:** Intent classification input also includes `agentState.phase` (e.g., `collect_lead_purpose`, `check_rates`, `collect_financial_profile`). The current workflow phase provides state-aware context that helps the classifier disambiguate intents — for example, "I want to change that" in the `collect_lead_purpose` phase likely refers to modifying loan amount, while in the `check_rates` phase it likely refers to getting current rates.
 >
@@ -315,10 +353,11 @@ When the classifier cannot confidently resolve an edge case, it returns `unrecog
 
 The framework builds a system prompt from the user's intent definitions and conversation context. The prompt includes:
 
-1. The last 3 user messages + last 3 agent messages (context window)
-2. A list of all intents with their descriptions
-3. A few-shot examples for each intent
-4. A structured output instruction: `{ intent: string, confidence: number, reasoning: string }`
+1. **Raw chat history** (`--- Recent conversation ---` section): last N user + N agent messages formatted as "Role: content"
+2. **Current user message**: prefixed with `Current user message: "..."` for clear separation
+3. **A list of all intents** with their descriptions
+4. **A few-shot examples** for each intent
+5. **A structured output instruction**: `{ intent: string, confidence: number, entities: object, missing_fields: string[] }`
 
 Temperature is set to 0 for deterministic classification.
 
@@ -499,3 +538,16 @@ In long-running conversations (e.g., 20+ turns), user intent may shift gradually
 
 - [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent document
 - [State Machine Design](./03-state-machine-design.md) — intent+state resolution logic
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+| 2026-07-17 | Section 3.1: added raw chat history format (`--- Recent conversation ---`), CLASSIFY_HISTORY_TURNS configurable env var, `_build_chat_history()` implementation pattern. Section 3.3: updated prompt construction with entity extraction and missing_fields in output instruction |

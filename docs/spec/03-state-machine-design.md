@@ -54,7 +54,7 @@ The previous version of this spec (v1.0.0) adopted "W3C SCXML 1.0 Recommendation
 | Entry/exit actions | UML statechart | `on_entry: set_field:` / `on_exit: set_field:` |
 | Parallel regions | UML statechart | parallel composite state + LangGraph `Send()` |
 | History states | UML statechart | deferred (Appendix C.1 Q3) |
-| Data model | UML statechart | entities + `agentState.collectedFields` |
+| Data model | UML statechart | entities + `agentState.collected_fields` |
 | Guards as named references | XState v5 / `python-statemachine` | `guard: "officer_eligible"` → `@register_guard` |
 
 #### SCXML ↔ YAML Mapping (Informative Reference)
@@ -68,7 +68,7 @@ The following mapping is retained as an **informative reference** for teams that
 | `<onentry>` | §3.3.2 | `on_entry: set_field:` |
 | `<onexit>` | §3.3.2 | `on_exit: set_field:` |
 | `cond="expr"` | §3.4 | `guard: "expr"` / `@register_guard` |
-| `<datamodel><data>` | §4 | entities + `agentState.collectedFields` |
+| `<datamodel><data>` | §4 | entities + `agentState.collected_fields` |
 | `<assign location="" expr=""/>` | §4.4 | `set_field: x: "expr"` |
 | `<send event="" target="">` | §3.12 | framework internal (checkpoint events) |
 | `<invoke type="" src="">` | §3.9 | `executor: sub_workflow` |
@@ -261,7 +261,7 @@ For the complete definition format and a concrete home insurance workflow, see [
 
 - **states**: typed nodes (`executor: llm | code`) with schemas, guards, metadata, and tool allowlists
 - **transitions**: named edges with guard expressions, self-loops, and `on_take` side-effects
-- **Meta-variables**: framework-generated flags (`context_incomplete`, `exit_guard_pass`, `all_approved`, etc.) usable in guard expressions
+- **Meta-variables**: framework-generated flags (`context_complete`, `exit_guard_pass`, `all_approved`, etc.) usable in guard expressions
 - **Declarative field mutations**: `on_entry`, `on_exit`, `on_take` — `set_field` assignments declared directly in YAML, tracking every agentState write in a single artifact (see §3.5)
 
 ---
@@ -376,7 +376,7 @@ states:
     #   exit_guard_pass    — true if all exit_guard constraints passed
     #   exit_guard_blocked — true if any exit_guard constraint failed
     #   context_complete   — true when the LLM confirms it has all needed data
-    #   context_incomplete — true when the LLM needs more info (drives self-loop)
+    #                         use `!context_complete` for self-loop guard
     #   all_approved       — true when all required human approvals received
     #   any_rejected       — true when any human approval was rejected
     #   any_field_missing  — true when output_schema has null required fields
@@ -463,15 +463,15 @@ transitions:
 6. Execute state B's main logic      ── executor runs (llm or code)
 ```
 
-**Why YAML, not Python:** The entire agentState mutation history is visible in a single artifact. Every field write is traceable: which state set it, at which lifecycle point, with what value. No reading action function code to find `ctx.collectedFields["x"] = y` hidden 50 lines deep.
+**Why YAML, not Python:** The entire agentState mutation history is visible in a single artifact. Every field write is traceable: which state set it, at which lifecycle point, with what value. No reading action function code to find `ctx.collected_fields["x"] = y` hidden 50 lines deep.
 
 **Expression types in set_field values:**
 
 | Type | Syntax | Example |
 |------|--------|---------|
 | Literal | quoted or unquoted value | `true`, `0`, `"CRITICAL"` |
-| Function call | `fn(args)` | `now()`, `uuid4()`, `len(collectedFields.items)` |
-| Field reference | `collectedFields.x` | `collectedFields.loan_amount * 0.8` |
+| Function call | `fn(args)` | `now()`, `uuid4()`, `len(collected_fields.items)` |
+| Field reference | `collected_fields.x` | `collected_fields.loan_amount * 0.8` |
 
 **set_field vs action function output_schema:**
 
@@ -481,6 +481,53 @@ transitions:
 | `action() return dict` → `output_schema` merger | During state main execution | Computed business data (loan_amount, rate, assigned_officer) |
 
 Complex computation still belongs in action functions. Simple field assignments belong in YAML.
+
+### 3.6 Runtime State Tracking Fields
+
+Beyond the declarative `collected_fields`, the agentState carries runtime fields that enable context-aware classification and extraction. These fields are set by the state machine (not YAML) during question-asking transitions.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `current_collecting_field` | `string` | Which field the agent is currently asking about (e.g., `"home_value"`, `"state"`). Set when the agent asks a question; cleared when the field is collected. |
+| `last_agent_question` | `string` | The exact text of the last question the agent asked. Used for transparency and debugging. |
+
+**Lifecycle:**
+
+```
+State: collect_home_value
+  on_entry:
+    set_field:
+      current_collecting_field: "home_value"
+      last_agent_question: "What is the estimated value of the property?"
+  │
+  ├─ User answers "800,000"
+  │   → extraction uses current_collecting_field for focused group lookup
+  │   → classify prompt includes last_agent_question in chat history
+  │
+  ├─ Transition to collect_loan_amount
+  │   on_entry:
+  │     set_field:
+  │       current_collecting_field: "loan_amount"
+  │       last_agent_question: "How much are you looking to borrow?"
+  │
+  └─ ...continues through all collecting states...
+```
+
+**Response metadata:** When the agent's response reaches the API layer, `current_collecting_field` is included as `current_field` in the response payload:
+
+```json
+{
+  "response": "What is the estimated value of the property?",
+  "phase": "collecting_info",
+  "user_type": "borrower",
+  "current_field": "home_value"
+}
+```
+
+This enables:
+- **Frontend field-aware UI**: show currency input for numeric fields, state picker for state
+- **Client-side validation**: validate before sending (e.g., "must be a number")
+- **Progress display**: "Step 2 of 5: Property Value"
 
 ---
 
@@ -497,7 +544,7 @@ For the generated graph of a complete workflow, see the diagram in [README.md](.
 | `llm` | Auto-inject chat history -> call LLM -> stream output -> checkpoint |
 | `code` | Execute deterministic action function; inputs/outputs are auditable |
 
-The graph structure mirrors the transitions definition exactly: the nodes are the states, the edges are the transitions with their guard conditions. Self-loops (e.g., `guard: context_incomplete`) keep the conversation in a state until data is complete.
+The graph structure mirrors the transitions definition exactly: the nodes are the states, the edges are the transitions with their guard conditions. Self-loops (e.g., `guard: !context_complete`) keep the conversation in a state until data is complete.
 
 ### 4.1 Auto-Generated Mermaid Visualization
 
@@ -759,3 +806,16 @@ For concrete intent+state resolution examples within home insurance workflows, s
 | 22 | Guard conflict detection — two guards that can be simultaneously true pointing to different targets | Runtime non-determinism |
 | 23 | Postcondition satisfiability — does the declared postcondition necessarily hold on the normal path | Contract validity |
 | 24 | YAML schema strictness — how many errors (field typos, type mismatches) can be caught before deployment | Developer experience |
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+| 2026-07-17 | Added Section 3.6: Runtime State Tracking Fields — `current_collecting_field` and `last_agent_question` lifecycle, response metadata with `current_field`, frontend field-aware UI pattern |
