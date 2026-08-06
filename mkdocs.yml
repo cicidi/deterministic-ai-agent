@@ -1,0 +1,291 @@
+site_name: Onboarding Research — Sensitive Data Collection Analysis
+site_description: 100+ company onboarding analysis — risk-vs-conversion tradeoffs, SWOT vs Intuit QuickBooks
+repo_url: https://github.com/cicidi/deterministic-ai-agent
+repo_name: cicidi/deterministic-ai-agent
+edit_uri: edit/master/docs/research/onboarding/
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: deep orange
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.tracking
+    - navigation.tabs.sticky
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Summary & Top 10: _summary/index.md
+  - Bottom 10 (Worst): _summary/bottom-10.md
+  - Methodology: _templates/METHODOLOGY.md
+  - Companies:
+      - PayPal:
+          - Overview: paypal/README.md
+          - "1. Fields & Collection": paypal/01-fields-collected.md
+          - "2. Risk Decision": paypal/02-risk-decision.md
+          - "3. Entitlement Model": paypal/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": paypal/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": paypal/05-swot-vs-qbo.md
+      - Stripe:
+          - Overview: stripe/README.md
+          - "1. Fields & Collection": stripe/01-fields-collected.md
+          - "2. Risk Decision": stripe/02-risk-decision.md
+          - "3. Entitlement Model": stripe/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": stripe/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": stripe/05-swot-vs-qbo.md
+      - Square:
+          - Overview: square/README.md
+          - "1. Fields & Collection": square/01-fields-collected.md
+          - "2. Risk Decision": square/02-risk-decision.md
+          - "3. Entitlement Model": square/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": square/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": square/05-swot-vs-qbo.md
+      - Plaid:
+          - Overview: plaid/README.md
+          - "1. Fields & Collection": plaid/01-fields-collected.md
+          - "2. Risk Decision": plaid/02-risk-decision.md
+          - "3. Entitlement Model": plaid/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": plaid/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": plaid/05-swot-vs-qbo.md
+      - Robinhood:
+          - Overview: robinhood/README.md
+          - "1. Fields & Collection": robinhood/01-fields-collected.md
+          - "2. Risk Decision": robinhood/02-risk-decision.md
+          - "3. Entitlement Model": robinhood/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": robinhood/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": robinhood/05-swot-vs-qbo.md
+      - Bank of America:
+          - Overview: bank-of-america/README.md
+      - Chase:
+          - Overview: chase/README.md
+      - Wells Fargo:
+          - Overview: wells-fargo/README.md
+      - Citibank:
+          - Overview: citi/README.md
+      - US Bank:
+          - Overview: us-bank/README.md
+      - PNC Bank:
+          - Overview: pnc/README.md
+      - Truist:
+          - Overview: truist/README.md
+      - UnitedHealth Group:
+          - Overview: unh/README.md
+      - GEICO:
+          - Overview: geico/README.md
+      - Progressive:
+          - Overview: progressive/README.md
+      - Cigna:
+          - Overview: cigna/README.md
+      - Allstate:
+          - Overview: allstate/README.md
+      - Farmers:
+          - Overview: farmers/README.md
+      - State Farm:
+          - Overview: state-farm/README.md
+      - Anthem:
+          - Overview: anthem/README.md
+      - Humana:
+          - Overview: humana/README.md
+      - Lemonade:
+          - Overview: lemonade/README.md
+      - Aetna:
+          - Overview: aetna/README.md
+      - MetLife:
+          - Overview: metlife/README.md
+      - Liberty Mutual:
+          - Overview: liberty-mutual/README.md
+      - Nationwide:
+          - Overview: nationwide/README.md
+      - Kaiser Permanente:
+          - Overview: kaiser/README.md
+      - Brex:
+          - Overview: brex/README.md
+      - Ramp:
+          - Overview: ramp/README.md
+      - Binance:
+          - Overview: binance/README.md
+      - Kraken:
+          - Overview: kraken/README.md
+      - N26:
+          - Overview: n26/README.md
+      - Monzo:
+          - Overview: monzo/README.md
+      - Charles Schwab:
+          - Overview: charles-schwab/README.md
+      - Discover:
+          - Overview: discover/README.md
+      - Fidelity:
+          - Overview: fidelity/README.md
+      - Starling Bank:
+          - Overview: starling/README.md
+      - TD Bank:
+          - Overview: td-bank/README.md
+      - Ally Bank:
+          - Overview: ally/README.md
+      - SoFi:
+          - Overview: sofi/README.md
+      - Mercury:
+          - Overview: mercury/README.md
+      - Capital One:
+          - Overview: capital-one/README.md
+      - American Express:
+          - Overview: amex/README.md
+      - HSBC:
+          - Overview: hsbc/README.md
+      - Alipay:
+          - Overview: alipay/README.md
+      - Adyen:
+          - Overview: adyen/README.md
+      - Affirm:
+          - Overview: affirm/README.md
+      - Synchrony:
+          - Overview: synchrony/README.md
+      - Wealthfront:
+          - Overview: wealthfront/README.md
+      - Betterment:
+          - Overview: betterment/README.md
+      - Acorns:
+          - Overview: acorns/README.md
+      - Gusto:
+          - Overview: gusto/README.md
+      - Rippling:
+          - Overview: rippling/README.md
+      - ADP:
+          - Overview: adp/README.md
+      - Upstart:
+          - Overview: upstart/README.md
+      - Upgrade:
+          - Overview: upgrade/README.md
+      - Credit Karma:
+          - Overview: credit-karma/README.md
+      - TurboTax:
+          - Overview: turbotax/README.md
+      - Xero:
+          - Overview: xero/README.md
+      - FreshBooks:
+          - Overview: freshbooks/README.md
+      - Wave:
+          - Overview: wave/README.md
+      - Rocket Mortgage:
+          - Overview: rocket-mortgage/README.md
+      - Mollie:
+          - Overview: mollie/README.md
+      - Expensify:
+          - Overview: expensify/README.md
+      - BILL:
+          - Overview: bill-com/README.md
+      - Airwallex:
+          - Overview: airwallex/README.md
+      - Remitly:
+          - Overview: remitly/README.md
+      - Deel:
+          - Overview: deel/README.md
+      - Remote:
+          - Overview: remote/README.md
+      - Vanguard:
+          - Overview: vanguard/README.md
+      - Prudential:
+          - Overview: prudential/README.md
+      - Tipalti:
+          - Overview: tipalti/README.md
+      - GoodRx:
+          - Overview: goodrx/README.md
+      - Cost Plus Drugs:
+          - Overview: cost-plus-drugs/README.md
+      - Gemini:
+          - Overview: gemini/README.md
+      - Webull:
+          - Overview: webull/README.md
+      - Dave:
+          - Overview: dave/README.md
+      - EarnIn:
+          - Overview: earnin/README.md
+      - Brigit:
+          - Overview: brigit/README.md
+      - Aspiration:
+          - Overview: aspiration/README.md
+      - DailyPay:
+          - Overview: dailypay/README.md
+      - Afterpay:
+          - Overview: afterpay/README.md
+      - Checkout.com:
+          - Overview: checkout/README.md
+      - Epic Systems:
+          - Overview: epic-systems/README.md
+      - Teladoc Health:
+          - Overview: teladoc/README.md
+      - Ledger:
+          - Overview: ledger/README.md
+      - Varo Bank:
+          - Overview: varo/README.md
+      - Current:
+          - Overview: current/README.md
+      - Optum:
+          - Overview: optum/README.md
+      - Marcus by GS:
+          - Overview: marcus/README.md
+      - Novo:
+          - Overview: novo/README.md
+      - Chime:
+          - Overview: chime/README.md
+      - Revolut:
+          - Overview: revolut/README.md
+      - Klarna:
+          - Overview: klarna/README.md
+      - Wise:
+          - Overview: wise/README.md
+      - Coinbase:
+          - Overview: coinbase/README.md
+          - "1. Fields & Collection": coinbase/01-fields-collected.md
+          - "2. Risk Decision": coinbase/02-risk-decision.md
+          - "3. Entitlement Model": coinbase/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": coinbase/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": coinbase/05-swot-vs-qbo.md
+      - UnitedHealth Group:
+          - Overview: unitedhealth/README.md
+          - "1. Fields & Collection": unitedhealth/01-fields-collected.md
+          - "2. Risk Decision": unitedhealth/02-risk-decision.md
+          - "3. Entitlement Model": unitedhealth/03-entitlement.md
+          - "4. UI/UX & Agentic Experience": unitedhealth/04-ui-ux-flow.md
+          - "5. SWOT vs QBO": unitedhealth/05-swot-vs-qbo.md
+      - Santander:
+          - Overview: santander-bank/README.md
+      - Barclays:
+          - Overview: barclays-uk/README.md
+      - Deutsche Bank:
+          - Overview: deutsche-bank-de/README.md
+      - ING:
+          - Overview: ing-direct/README.md
+  - Templates: _templates/README.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed
+  - pymdownx.emoji
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+docs_dir: docs/research/onboarding
+site_dir: site/onboarding-research
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
