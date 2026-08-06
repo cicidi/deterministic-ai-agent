@@ -1,0 +1,553 @@
+# Layer 1: Intent Classification
+
+> Part of [Deterministic Workflow Framework — High-Level Design](./01-deterministic-workflow-framework-design.md)
+> Focused on: Intent classification within the UNDERSTAND layer.
+> All concrete intent examples have been extracted to [examples/mortgage-lead/](../../examples/mortgage-lead/).
+
+---
+
+## Changelog
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-06-16 | 0.1.0 | Initial intent classification spec |
+| 2026-06-16 | 0.2.0 | Extract custom intent examples to examples/; fix section numbering |
+| 2026-06-17 | 0.3.0 | Add implementation options comparison, YAML schema, open questions, errorNode cross-reference, agentState.phase mention |
+| 2026-06-18 | 0.6.1 | §5.6 deferred (cross-lingual, English-only); §5.7 decided: few-shot mandatory, min 3 examples, no zero-shot fallback |
+| 2026-06-18 | 0.6.0 | Remove keyword fallback entirely: delete §3.4 (Keyword Matching) + §3.6 (Merge Strategy); simplify to LLM-only flow with `unrecognized_intent` as the sole fallback; remove `"keyword"` from `ClassifiedIntent.source` enum; keywords kept in IntentDef as metadata only; add Agent column to §5.2 routing table (ReadOnlyAgent / WriteAgent / EscalationAgent / none) |
+| 2026-06-18 | 0.5.1 | Simplify §2.4: remove Options A/B/C comparison table; keep only LLM + keyword fallback as the single strategy |
+| 2026-06-18 | 0.5.0 | Expand system intents from 8 to 17: remove `resume_conversation` (demoted to system state, not user intent); add `help`, `correction`, `chitchat`, `out_of_scope`, `repeat`, `escalate`, `restart`, `complaint`, `pause`, `ambiguous_request`; add keyword + example YAML definitions for all system intents; expand §5.2 payload mapping to all 17 system intents |
+| 2026-06-18 | 0.4.0 | IntentDef adds `complex` field; multi-intent detection implemented (single user message → multiple intents); intent combination validation rules; intent→payload mapping table |
+
+---
+
+## 1. Role
+
+Intent classification answers: *"What does the user want to do?"*
+
+It maps a free-form user utterance to a predefined intent label, optionally with a confidence score. The output is consumed by the state machine (Layer 2) to determine valid state transitions.
+
+## 2. Intent Model
+
+### 2.1 System Intents (built-in)
+
+All 17 system intents below are available to every workflow. They cover conversation lifecycle, error recovery, task disambiguation, and social interaction — independent of any product domain.
+
+| Category | Intent | Description | Complex |
+|----------|--------|-------------|---------|
+| **Conversation Lifecycle** | `start_conversation` | User initiates a new conversation | false |
+| | `finish_conversation` | User wants to end the conversation | false |
+| | `pause` | User asks the bot to pause or wait ("hold on", "wait a moment") | false |
+| | `restart` | User wants to start the current workflow over from the beginning | false |
+| **Information Exchange** | `ask_question` | User asks for information or explanation | false |
+| | `provide_information` | User provides data in response to a prompt | false |
+| | `repeat` | User asks the bot to repeat the last response | false |
+| **Confirmation** | `confirm` | User agrees or confirms | false |
+| | `decline` | User disagrees, cancels, or rejects | false |
+| **Error & Recovery** | `unrecognized_intent` | Cannot determine intent (low confidence fallback) | false |
+| | `correction` | User corrects a prior statement — theirs or the bot's | false |
+| | `ambiguous_request` | Utterance maps to multiple possible intents; needs disambiguation | false |
+| | `out_of_scope` | Request recognized but system explicitly does not support it | false |
+| **Social & Meta** | `help` | User asks about system capabilities or how to use the bot | false |
+| | `chitchat` | Casual social conversation unrelated to any task | false |
+| | `complaint` | User expresses dissatisfaction or files a complaint | false |
+| | `escalate` | User requests to speak with a human agent | false |
+
+> **All system intents are `complex: false`** — they can be freely combined with each other and with custom intents in a single classification round (see §4.3).
+
+#### System Intent Keywords & Examples
+
+Each system intent includes `keywords` for documentation and `examples` for LLM few-shot prompting. Keywords are not used in runtime classification.
+
+```yaml
+# SYSTEM INTENTS — built into the framework
+# All complex: false; all can combine with simple intents
+
+system_intents:
+  # ── Conversation Lifecycle ──
+  - name: start_conversation
+    description: User initiates a new conversation
+    keywords: [hello, hi, hey, good morning, good afternoon, greetings, what's up]
+    examples:
+      - "Hello, I need help"
+      - "Hi there"
+      - "Good morning"
+
+  - name: finish_conversation
+    description: User wants to end the conversation
+    keywords: [bye, goodbye, that's all, done, no more questions, I'm finished, see you, thanks bye]
+    examples:
+      - "That's all I needed, thanks"
+      - "Goodbye"
+      - "I'm done, thank you"
+
+  - name: pause
+    description: User asks the bot to pause or wait
+    keywords: [wait, hold on, one moment, give me a second, pause, hang on, let me think, not ready]
+    examples:
+      - "Wait, let me check something"
+      - "Hold on a moment"
+      - "Give me a second"
+
+  - name: restart
+    description: User wants to start the current workflow over from the beginning
+    keywords: [start over, begin again, restart, from the beginning, reset, clear everything, new session, let's redo]
+    examples:
+      - "Let's start over"
+      - "Can we begin again?"
+      - "Reset everything, I made a mistake"
+
+  # ── Information Exchange ──
+  - name: ask_question
+    description: User asks for information or explanation
+    keywords: [what is, how does, tell me about, explain, why, when did, where is, who is, can you tell]
+    examples:
+      - "What is the current interest rate?"
+      - "What are current mortgage rates?"
+      - "Tell me about loan options"
+
+  - name: provide_information
+    description: User provides data in response to a prompt
+    keywords: [my name is, my phone is, my address is, the number is, it's, here is, this is]
+    examples:
+      - "My name is John"
+      - "The address is 123 Main St"
+      - "It's 555-0123"
+
+  - name: repeat
+    description: User asks the bot to repeat the last response
+    keywords: [repeat, say that again, what did you say, come again, pardon, sorry what, can you repeat, once more]
+    examples:
+      - "Can you repeat that?"
+      - "What did you say?"
+      - "Say that again please"
+
+  # ── Confirmation ──
+  - name: confirm
+    description: User agrees or confirms
+    keywords: [yes, yeah, correct, that's right, exactly, sounds good, okay, sure, go ahead, proceed]
+    examples:
+      - "Yes, that's correct"
+      - "Sounds good, proceed"
+      - "Yeah, go ahead"
+
+  - name: decline
+    description: User disagrees, cancels, or rejects
+    keywords: [no, nope, not, that's wrong, incorrect, cancel, stop, never mind, I don't want, reject]
+    examples:
+      - "No, that's not what I want"
+      - "Cancel that"
+      - "Never mind, forget it"
+
+  # ── Error & Recovery ──
+  - name: unrecognized_intent
+    description: Cannot determine intent (low confidence fallback)
+    keywords: []  # no keywords — produced by classifier when confidence < threshold
+    examples: []  # no examples — this is a fallback output, not a user-expressed intent
+    note: "Framework-internal fallback. Not matched by keywords; produced when all classification fails."
+
+  - name: correction
+    description: User corrects a prior statement — theirs or the bot's
+    keywords: [no, wrong, that's not right, I meant, actually, not that, I said, change that to, correct that, not X]
+    examples:
+      - "No, I meant 456 Oak Street, not 123 Main"
+      - "That's wrong, my phone is 555-9999"
+      - "Actually, I changed my mind — make it $500k loan amount"
+
+  - name: ambiguous_request
+    description: Utterance maps to multiple possible intents; needs disambiguation
+    keywords: []  # no keywords — produced by classifier when confidence is split
+    examples: []  # no examples — this is a classifier meta-output
+    note: "Framework-internal meta-intent. Produced when classifier detects multiple equally-plausible intents and needs user disambiguation."
+
+  - name: out_of_scope
+    description: Request recognized but system explicitly does not support it
+    keywords: []  # no keywords — determined by system capability registry, not user phrasing
+    examples: []  # no examples — the user's words vary; classifier cross-references with capability registry
+    note: "Framework-internal meta-intent. Produced when the classifier identifies a valid request pattern that the system's capability registry marks as unsupported."
+
+  # ── Social & Meta ──
+  - name: help
+    description: User asks about system capabilities or how to use the bot
+    keywords: [help, what can you do, how do I use, guide me, assist, support, what are you capable of, commands, options]
+    examples:
+      - "What can you help me with?"
+      - "How do I use this?"
+      - "What are my options?"
+
+  - name: chitchat
+    description: Casual social conversation unrelated to any task
+    keywords: [how are you, how's it going, thank you, thanks, appreciate it, tell me a joke, nice weather, lol, haha, how do you do]
+    examples:
+      - "How are you today?"
+      - "Thank you for helping!"
+      - "Tell me a joke"
+
+  - name: complaint
+    description: User expresses dissatisfaction or files a complaint
+    keywords: [complaint, unhappy, dissatisfied, frustrated, terrible, awful, bad service, not satisfied, want to complain, this is unacceptable]
+    examples:
+      - "I'm very unhappy with this process"
+      - "This is terrible service"
+      - "I want to file a complaint"
+
+  - name: escalate
+    description: User requests to speak with a human agent
+    keywords: [human, speak to someone, real person, talk to a person, representative, agent, customer service, operator, transfer me, connect me to]
+    examples:
+      - "I want to speak to a human"
+      - "Can you transfer me to an agent?"
+      - "Let me talk to a real person"
+```
+
+> **Meta-intents** (`unrecognized_intent`, `ambiguous_request`, `out_of_scope`) are produced by the classifier, not by pattern matching. They rely entirely on LLM classification and capability registry lookup. See §3 for classification flow.
+
+### 2.2 Custom Intents (per-workflow)
+
+Each workflow can define additional domain-specific intents. For a complete catalog of mortgage lead intents with keywords and examples, see [intent-definitions.md](../../examples/mortgage-lead/intent-definitions.md). The framework uses the same `IntentDef` schema for both system and custom intents.
+
+### 2.3 Intent Definition Schema
+
+```yaml
+# Schema: IntentDef
+#   name:        string      # unique identifier
+#   description: string      # guides LLM classification
+#   complex:     boolean     # true = multi-turn task; cannot combine with other complex intents
+#   keywords:    string[]    # metadata only (not used in runtime classification)
+#   examples:    string[]    # few-shot examples for LLM prompt
+
+intents:
+  - name: "ask_question"
+    description: "User asks for information or explanation"
+    complex: false
+    keywords:
+      - "what is"
+      - "how does"
+      - "tell me about"
+      - "explain"
+    examples:
+      - "What is the current interest rate?"
+      - "What are current mortgage rates?"
+      - "Tell me about loan options"
+
+  - name: "submit_lead"
+    description: "User submits a new mortgage lead"
+    complex: true
+    keywords:
+      - "apply"
+      - "submit"
+      - "mortgage"
+      - "refinance"
+      - "new loan"
+    examples:
+      - "I want to submit a mortgage application"
+      - "I want to apply for a home loan"
+      - "Can you help me get a mortgage?"
+```
+
+### 2.4 Classification Strategy
+
+The framework supports two classification strategies:
+
+#### Option A: LLM-First (Default)
+
+The framework uses **LLM-first classification**. No keyword fallback — if the LLM cannot classify with sufficient confidence, the framework asks the user to clarify.
+
+| Dimension | Behavior |
+|-----------|----------|
+| **Primary** | LLM classifies the user utterance with conversation context and intent definitions |
+| **Confidence Threshold** | Configurable, default `0.7`. Below threshold → `unrecognized_intent` → clarification |
+| **LLM Failure** | Gateway retries within budget. Exhausted → `unrecognized_intent` → clarification |
+| **Temperature** | 0 (deterministic output) |
+
+#### Option B: Cascade (Keyword-First, LLM-Second)
+
+For cost-constrained deployments, the classifier runs a deterministic keyword/regex match first. If the keyword match has confidence >= 0.95, the result is returned immediately (zero LLM cost). If below threshold or ambiguous, the LLM-first pipeline is invoked as fallback.
+
+| Strengths | Reduces LLM cost for obvious intents (simple commands, greetings); deterministic first pass is fast and auditable |
+|-----------|----------------------------------------------------------------------------------------------------------------|
+| Weaknesses | Keyword list must be maintained; new intents require LLM fallback; adds latency for ambiguous cases |
+| Best for | High-volume production with many simple/repetitive user interactions |
+
+#### Comparison Matrix
+
+| Dimension | Option A (LLM-First) | Option B (Cascade) |
+|-----------|---------------------|---------------------|
+| **Primary classifier** | LLM (always) | Keyword/Regex (first) |
+| **Fallback** | `unrecognized_intent` → clarification | LLM (second) → `unrecognized_intent` if both fail |
+| **LLM cost** | 1 call per utterance | 0 for obvious intents ($0); 1 call for ambiguous/new |
+| **Latency (obvious)** | ~500ms (LLM round-trip) | <5ms (keyword match) |
+| **Latency (ambiguous)** | ~500ms | ~505ms (keyword miss + LLM) |
+| **Keyword maintenance** | None required | Required for each intent |
+| **Auditability** | LLM reasoning trail | Keyword match is fully deterministic |
+| **Best for** | Low-volume, high-complexity (e.g., internal tools) | High-volume, repetitive (e.g., customer-facing chat) |
+| **New intent handling** | Automatic via LLM understanding | Requires LLM fallback + keyword update |
+
+The full classification flow is specified in §3.
+
+## 3. Classification Strategy: LLM-First
+
+> **All LLM output is JSON.** The framework enforces schema validation, field presence, and type coercion on every classification result via output guardrails (see HLD Section 4.3). If JSON is malformed, the guardrail auto-retries within the retry budget.
+
+### 3.1 Conversation Context
+
+Intent classification is not a single-message operation. The LLM prompt must include conversation history to resolve ambiguous utterances. For example, "yes" means `confirm` if the agent just asked "should I proceed?" but means `provide_information` if the agent asked "is your phone number 555-0123?" (confirming extracted data). Without context, a one-word reply like "yes" to "what's your name?" is `unrecognized_intent` — it makes no semantic sense.
+
+The framework includes the **last N user messages + last N agent messages** as context in every classification call. This provides enough history to disambiguate short responses without bloating the prompt.
+
+**Context depth is configurable** via `CLASSIFY_HISTORY_TURNS` (default: 3). More turns = more accuracy for complex multi-turn flows. Shorter = faster/cheaper for simple flows.
+
+```bash
+export CLASSIFY_HISTORY_TURNS=3   # default; increase for higher accuracy
+```
+
+#### Raw Chat History Format
+
+The conversation context is injected as **raw dialog** — not a synthesized summary. The LLM sees the actual conversation text:
+
+```
+--- Recent conversation ---
+Agent: Are you buying (purchase) or refinancing?
+User: purchase
+Agent: What is the estimated value of the property?
+
+Current user message: "800,000"
+```
+
+This format is superior to synthesized metadata (e.g., "the agent JUST asked about home_value") because:
+
+| Approach | Accuracy | Information Loss | LLM Understanding |
+|----------|----------|------------------|-------------------|
+| Raw chat history | High | None — LLM reads the actual dialog | Natural language understanding |
+| Synthesized summary | Medium | Summary loses nuance, timing, exact phrasing | Must trust the summary author |
+
+#### Implementation: `_build_chat_history()`
+
+The function extracts the last N user/assistant pairs from `state.messages`:
+
+```
+function _build_chat_history(messages, turns=CLASSIFY_HISTORY_TURNS):
+    filter messages to roles in (user, assistant)
+    take last (turns * 2) messages
+    format each as "Role: content" (truncate >200 chars)
+    return joined string, or "(no prior messages)" if empty
+```
+
+> **Note:** Intent classification input also includes `agentState.phase` (e.g., `collect_lead_purpose`, `check_rates`, `collect_financial_profile`). The current workflow phase provides state-aware context that helps the classifier disambiguate intents — for example, "I want to change that" in the `collect_lead_purpose` phase likely refers to modifying loan amount, while in the `check_rates` phase it likely refers to getting current rates.
+>
+> **Note on phase names:** The phase names used in this spec's examples come from the mortgage-lead domain (`collect_lead_purpose`, `collect_financial_profile`, etc.). The state-machine spec uses home-insurance domain examples (e.g., `collect_property_info`). These are separate example domains; phase names are always domain-specific and defined in the workflow YAML. The concept of `agentState.phase` is the same across both — only the domain vocabulary differs.
+
+### 3.2 Edge Case Coverage
+
+Intent classification serves as the system's safety net for unexpected user behavior. Edge cases it must handle:
+
+- Abrupt topic switches mid-workflow ("never mind, I want to pay someone instead")
+- Ambiguous one-word responses ("ok", "sure", "no")
+- Off-topic questions during a workflow
+- Partial or incomplete utterances
+- Code-switching or mixed-language input
+
+When the classifier cannot confidently resolve an edge case, it returns `unrecognized_intent`, triggering a clarification response.
+
+### 3.3 LLM Prompt Construction
+
+The framework builds a system prompt from the user's intent definitions and conversation context. The prompt includes:
+
+1. **Raw chat history** (`--- Recent conversation ---` section): last N user + N agent messages formatted as "Role: content"
+2. **Current user message**: prefixed with `Current user message: "..."` for clear separation
+3. **A list of all intents** with their descriptions
+4. **A few-shot examples** for each intent
+5. **A structured output instruction**: `{ intent: string, confidence: number, entities: object, missing_fields: string[] }`
+
+Temperature is set to 0 for deterministic classification.
+
+### 3.4 Classification Flow
+
+```
+1. Build LLM prompt (context + intents + examples)
+2. Call LLM Gateway (temperature=0, output_schema enforcement)
+3. If confidence ≥ threshold → return classified intents
+4. If confidence < threshold or LLM fails (retries exhausted) → return unrecognized_intent
+5. Route to Layer 3 for clarification response
+```
+
+There is no keyword fallback. A low-confidence result and a failed LLM call produce the same outcome: `unrecognized_intent`, triggering a clarification question. This is simpler, more predictable, and avoids keyword collision across 17+ intents.
+
+## 4. Output Contract
+
+### 4.1 Classification Result (per-intent)
+
+```
+ClassifiedIntent {
+  intent:     string      // the resolved intent label
+  confidence: number      // 0.0 - 1.0
+  source:     "llm" | "unrecognized"
+  reasoning?: string      // LLM's reasoning (for audit trail)
+}
+```
+
+The `source` field indicates which classifier produced the result, enabling downstream nodes to adjust behavior (e.g., "LLM match with high confidence → proceed; LLM match with borderline confidence → re-confirm").
+
+### 4.2 Multi-Intent Output
+
+A single user utterance may carry multiple intents ("I want to check rates, my phone is 123-456-7890"). The classifier returns a list of `ClassifiedIntent` objects:
+
+```
+ClassificationResult {
+  intents: ClassifiedIntent[]  // one or more resolved intents
+}
+```
+
+**Example:**
+
+```json
+{
+  "intents": [
+    {
+      "intent": "check_rates",
+      "confidence": 0.95,
+      "source": "llm"
+    },
+    {
+      "intent": "provide_information",
+      "confidence": 0.88,
+      "source": "llm",
+      "reasoning": "User provided phone number alongside rate check intent"
+    }
+  ]
+}
+```
+
+### 4.3 Intent Combination Rules
+
+Each intent carries a `complex` flag. The combination rules prevent incompatible combinations in a single processing round:
+
+| Scenario | Allowed | Behavior |
+|----------|---------|----------|
+| Multiple simple intents | Yes | Process together |
+| 1 complex + N simple intents | Yes | Process together (simple intents ride on the complex workflow) |
+| Multiple complex intents | No (by default) | See conflict resolution below |
+
+**Conflict resolution for multiple complex intents** is configured in the Response node under `on_multi_intent_conflict`:
+
+| Mode | Behavior |
+|------|----------|
+| `error` (default) | Throw `MultiIntentConflictError`; response layer asks user which task to handle first |
+| `sequential` | Process highest-confidence complex intent first; queue remaining for next turn |
+
+**Validation pseudo-code:**
+
+```
+def validate_intent_combination(intents: ClassifiedIntent[], intent_defs: IntentDef[], mode: string):
+    complex = [i for i in intents if intent_defs[i.intent].complex]
+    if len(complex) > 1:
+        if mode == "error":
+            raise MultiIntentConflictError(
+                conflict_intents=[i.intent for i in complex],
+                message="Multiple tasks detected. Please choose one to handle first."
+            )
+        # sequential: keep highest-confidence, queue the rest
+```
+
+---
+
+## 5. Open Questions
+
+### 5.1 Multi-Intent Detection
+
+Multi-intent detection is now implemented. The classifier returns a list of `ClassifiedIntent` objects per user message (see Section 4.2). Intent combination validation (Section 4.3) prevents incompatible complex intents from being processed together.
+
+### 5.2 Intent → Extraction Payload Mapping
+
+Each intent is mapped to a typed extraction payload consumed by the Extract node (see [Extraction Layer Spec](./05-extraction-layer-design.md)):
+
+#### System Intents
+
+| Intent | Agent | Payload Class | Extraction / Routing |
+|--------|-------|--------------|---------------------|
+| `start_conversation` | — | *(skip extraction)* | route to conversation init node |
+| `finish_conversation` | — | *(skip extraction)* | route to conversation end node |
+| `pause` | — | *(skip extraction)* | pause processing, await user signal |
+| `restart` | — | *(skip extraction)* | reset agentState, return to entry |
+| `confirm` | — | `ConfirmIntentPayload` | `fields: dict[str, bool]` |
+| `decline` | — | `DeclineIntentPayload` | `fields: dict[str, bool]` |
+| `correction` | — | `CorrectionIntentPayload` | `corrected_fields: dict[str, Any]` |
+| `unrecognized_intent` | — | *(skip extraction)* | route to clarification node |
+| `ambiguous_request` | — | `AmbiguousRequestPayload` | `possible_intents: str[]`, requires user disambiguation |
+| `out_of_scope` | — | *(skip extraction)* | route to out-of-scope response node |
+| `ask_question` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
+| `chitchat` | ReadOnlyAgent | *(skip extraction)* | agent.query(prompt, ...) |
+| `help` | — | *(skip extraction)* | deterministic capabilities listing |
+| `repeat` | — | *(skip extraction)* | replay last assistant message |
+| `provide_information` | — | `ProvideInformationIntentPayload` | `field_values: dict[str, Any]` |
+| `complaint` | EscalationAgent | `ComplaintIntentPayload` | `subject: str, details: str` |
+| `escalate` | EscalationAgent | `EscalateIntentPayload` | `reason: str, urgency: str` |
+
+> **Conversation control intents** (`start_conversation`, `finish_conversation`, `pause`, `restart`, `confirm`, `decline`, `correction`) and **error/recovery intents** (`unrecognized_intent`, `ambiguous_request`, `out_of_scope`) map to **0 agents** — the state machine handles them directly.
+
+#### Custom Intents (per-workflow)
+
+| Intent | Agent | Payload Class | Extraction / Routing |
+|--------|-------|--------------|---------------------|
+| `<domain_intent>` (read) | ReadOnlyAgent | `<DomainIntentPayload>` | `field_values: dict[str, Any]` |
+| `<domain_intent>` (write) | — | `<DomainIntentPayload>` | `field_values: dict[str, Any]` |
+
+Each custom intent maps to exactly **0 or 1 agent**, determined by its operation category:
+
+| Operation Category | Agent |
+|-------------------|-------|
+| Lookup, search, status check | ReadOnlyAgent |
+| Create, update, delete, execute | — (state machine) |
+| Handoff, complaint | EscalationAgent |
+| Conversation control | — (none) |
+
+> Write operations NEVER go through an agent. They execute as deterministic state machine transitions.
+
+> **Example — Mortgage Lead:** `submit_lead` → state machine (`LeadPayload`), `check_rates` → ReadOnlyAgent (`RateCheckPayload`), `check_application_status` → ReadOnlyAgent (`ApplicationStatusPayload`).
+
+### 5.3 Intent Analysis Prompt Guidelines
+
+When the LLM analyzes a user message, it should:
+
+1. Identify all intents present (may be multiple)
+2. For each intent, extract any associated data fields
+3. Return an `ClassifiedIntent` for EACH detected intent with its own confidence score
+4. Do not merge data from different intents into a single payload
+
+**Example:** "I want to check rates, my phone is 123-456-7890" produces TWO payloads — one `RateCheckPayload` (no data) + one `ProvideInformationIntentPayload` (phone number).
+
+### 5.4 Confidence Threshold Calibration
+
+The default threshold of `0.7` is a starting point. In practice, optimal thresholds vary by domain, intent complexity, and LLM model choice. How should teams calibrate thresholds? Options include: historical accuracy analysis per intent, A/B testing, or adaptive thresholds based on conversation phase.
+
+### 5.5 Intent Drift Over Long Conversations
+
+In long-running conversations (e.g., 20+ turns), user intent may shift gradually without an abrupt topic switch. Should the framework detect intent drift via a windowed confidence trend, or rely on the Layer 2 state machine to detect phase mismatches?
+
+### 5.6 Cross-Lingual Intent Classification
+
+> **Deferred.** The framework currently targets English-only. Cross-lingual support (translate-to-English, multilingual embeddings, etc.) is out of scope for the initial release. English is the only supported input language.
+
+### 5.7 Cold Start: Few-Shot Only
+
+**Few-shot examples are mandatory.** Every custom intent must provide at least 3 `examples` in its `IntentDef`. The framework rejects any intent definition with `len(examples) < 3` at configuration validation time. No zero-shot fallback — the LLM must have concrete examples to work from. This is consistent with the framework's determinism principle: never ask the LLM to guess.
+
+---
+
+## References
+
+- [High-Level Design](./01-deterministic-workflow-framework-design.md) — parent document
+- [State Machine Design](./03-state-machine-design.md) — intent+state resolution logic
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Moved from docs/specs/ to docs/spec/ |
+| 2026-07-17 | Section 3.1: added raw chat history format (`--- Recent conversation ---`), CLASSIFY_HISTORY_TURNS configurable env var, `_build_chat_history()` implementation pattern. Section 3.3: updated prompt construction with entity extraction and missing_fields in output instruction |
